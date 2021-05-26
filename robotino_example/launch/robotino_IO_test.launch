@@ -1,0 +1,6 @@
+<launch>
+
+  <!-- IO test node -->
+  <node pkg="robotino_example" type="robotino_io_test.py" name="robotino_io_test" output="screen"/>
+
+</launch>

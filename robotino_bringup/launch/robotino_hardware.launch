@@ -1,0 +1,41 @@
+<launch>
+
+  <!-- Arguments -->
+  <arg name="robot_ip" default="127.0.1.1" />
+
+  <!-- Robotino description -->
+  <include file="$(find robotino_bringup)/launch/includes/description.launch.xml"/>
+
+  <!-- Start-up the drive node for sending movement commands to the robot -->
+  <node name="rto_drive" pkg="rto_node" type="rto_node" output="screen">
+    <param name="hostname" value="$(arg robot_ip)" />
+    <param name="max_linear_vel" value="0.3" />
+    <param name="min_linear_vel" value="0.01" />
+    <param name="max_angular_vel" value="0.6" />
+    <param name="min_angular_vel" value="0.01" />
+    <remap from="rto_joint_states" to="joint_states" />
+  </node>
+
+  <!-- Start-up the odometry node to receive odom information from the robot -->
+  <node name="rto_odom" pkg="rto_node" type="rto_odometry_node" output="screen">
+    <param name="hostname" value="$(arg robot_ip)" />
+    <remap from="rto_joint_states" to="joint_states" />
+  </node>
+
+  <!-- Start-up robot-state-publisher for tf info -->
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+    <param name="publish_frequency" type="double" value="20.0" />
+  </node>
+
+  <!-- LiDAR Driver -->
+  <node name="sick_node" pkg="sicks300" type="sick300_driver" >
+	<remap from="laserscan" to="scan" />
+  </node>
+
+  <!-- Camera driver -->
+  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" />
+
+  <!-- Start-up joystick node in order to steer the robot with a joystick -->
+  <include file="$(find rto_teleop)/launch/joystick_teleop.launch" />
+
+</launch>

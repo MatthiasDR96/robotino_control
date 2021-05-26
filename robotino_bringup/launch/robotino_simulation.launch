@@ -1,0 +1,37 @@
+<launch>
+
+    <!-- Arguments -->
+    <arg name="robot_env" default="$(optenv ROBOT_ENV simple_world)"/>
+    <arg name="x_pos" default="0.0"/>
+    <arg name="y_pos" default="0.0"/>
+    <arg name="z_pos" default="0.0"/>
+
+    <!-- Robotino description -->
+    <include file="$(find robotino_bringup)/launch/includes/description.launch.xml"/>
+
+    <!-- Gazebo simulator -->
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name" value="$(find rto_worlds)/worlds/$(arg robot_env).world"/> 
+        <arg name="paused" value="false"/>
+        <arg name="use_sim_time" value="true"/>
+        <arg name="gui" value="true"/>
+        <arg name="headless" value="false"/>
+        <arg name="debug" value="false"/>
+    </include>
+
+    <!-- State publisher -->
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+        <param name="publish_frequency" type="double" value="20.0" />
+    </node>
+
+    <!-- Spawn robot -->
+    <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf"  args="-urdf -model rto-1 -x $(arg x_pos) -y $(arg y_pos) -z $(arg z_pos) -param robot_description" />
+
+    <!-- Keyboard Teleop Node -->
+	<node pkg="rto_teleop" type="keyboard_teleop_node"
+		name="keyboard_teleop_node" output="screen" >
+		<param name="scale_linear" value="2.0" type="double" />
+		<param name="scale_angular" value="1.0" type="double" />
+	</node>
+
+</launch>

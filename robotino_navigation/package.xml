@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>robotino_navigation</name>
+  <version>1.2.5</version>
+  <description>
+    The robotino_navigation provides roslaunch scripts for starting the navigation.
+  </description>
+  <license>BSD</license>
+  <author email="matthias.deryck@kuleuven.be">Matthias De Ryck</author>
+  <maintainer email="matthias.deryck@kuleuven.be">Matthias De Ryck</maintainer>
+  <buildtool_depend>catkin</buildtool_depend>
+  <exec_depend>amcl</exec_depend>
+  <exec_depend>map_server</exec_depend>
+  <exec_depend>move_base</exec_depend>
+  <exec_depend>robotino_bringup</exec_depend>
+</package>

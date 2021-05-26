@@ -1,0 +1,23 @@
+navigation:
+  linear_speed_limit: 0.3
+  angular_speed_limit: 0.5
+  goal_reach_threshold: 0.01
+  angle_threshold: 0.05
+  k_alpha: 1
+
+pure_pursuit:
+  Lfc: 0.5
+  k_rho: 0.5
+  k_alpha: 1.5
+  k_beta: -0.6
+  speed: 0.3
+  pos_tol: 0.1
+
+collision_avoidance:
+  shift: 1.5707963
+  range_limit: 0.7
+  safetyzone_margin: 0.2
+  robot_diameter: 0.45
+  robot_laser_distance: 0.2
+  threshold: 10
+  angular_velocity: 40

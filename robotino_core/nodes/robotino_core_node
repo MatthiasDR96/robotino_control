@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+
+import rospy
+import tf
+from robotino_core.agv.AGV_Main import AGV
+
+if __name__ == '__main__':
+
+    # Params
+    ip = rospy.get_param("/robotino_core_node/robot_ip")
+    port = rospy.get_param("/robotino_core_node/robot_port")
+
+    # Init transfrom listener
+    tf_listener = tf.TransformListener()
+
+    # Get location
+    tf_listener.waitForTransform('odom', 'base_link', rospy.Time(), rospy.Duration(1.0))
+    (trans, rot) = tf_listener.lookupTransform('odom', 'base_link', rospy.Time(0))
+    loc = (trans[0], trans[1])
+
+    # Init AGV object
+    try:
+        AGV(ip, port, loc)
+    except:
+        rospy.loginfo("Shutdown program.")

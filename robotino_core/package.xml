@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>robotino_core</name>
+  <version>1.2.5</version>
+  <description>
+    This package provides the Robotino core intelligence;
+  </description>
+
+  <license>BSD</license>
+  <author email="matthias.deryck@kuleuven.be">Matthias De Ryck</author>
+  <maintainer email="matthias.deryck@kuleuven.be">Matthias De Ryck</maintainer>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <exec_depend>rospy</exec_depend>
+  <exec_depend>Comm</exec_depend>
+
+  <export>
+  </export>
+</package>

@@ -1,0 +1,12 @@
+<launch>
+
+  <!-- rviz -->
+  <node pkg="rviz" type="rviz" name="rviz" required="true" args="-d $(find robotino_navigation)/rviz/robotino_navigation.rviz"/>
+
+  <!-- Image viewer -->
+  <!--<node name="image_view" pkg="image_view" type="image_view" respawn="false" output="screen">
+	<remap from="image" to="/usb_cam/image_raw"/>
+	<param name="autosize" value="true" />
+  </node>-->
+    
+</launch>
