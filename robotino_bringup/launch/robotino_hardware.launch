@@ -1,41 +1,40 @@
 <launch>
 
   <!-- Arguments -->
-  <arg name="robot_ip" default="127.0.1.1" />
+  <arg name="hostname" default="127.0.0.1" />
+  <arg name="tf_prefix" default="no_prefix" />
+  <arg name="use_tf_prefix" default="false" />
 
   <!-- Robotino description -->
   <include file="$(find robotino_bringup)/launch/includes/description.launch.xml"/>
 
   <!-- Start-up the drive node for sending movement commands to the robot -->
-  <node name="rto_drive" pkg="rto_node" type="rto_node" output="screen">
-    <param name="hostname" value="$(arg robot_ip)" />
-    <param name="max_linear_vel" value="0.3" />
-    <param name="min_linear_vel" value="0.01" />
-    <param name="max_angular_vel" value="0.6" />
-    <param name="min_angular_vel" value="0.01" />
-    <remap from="rto_joint_states" to="joint_states" />
-  </node>
-
+  
+    
   <!-- Start-up the odometry node to receive odom information from the robot -->
-  <node name="rto_odom" pkg="rto_node" type="rto_odometry_node" output="screen">
-    <param name="hostname" value="$(arg robot_ip)" />
-    <remap from="rto_joint_states" to="joint_states" />
-  </node>
+
 
   <!-- Start-up robot-state-publisher for tf info -->
   <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
-    <param name="publish_frequency" type="double" value="20.0" />
+        <param name="publish_frequency" type="double" value="20.0" />
+        <param name="tf_prefix" value="$(arg tf_prefix)" if="$(arg use_tf_prefix)"/>
   </node>
+
+  <!-- Publish some transformations -->
+  <node pkg="tf" type="static_transform_publisher" name="laser_camera_broadcaster" args="0.0 0 0.0 0 0 0 laser_link camera_depth_frame 50" unless="$(arg use_tf_prefix)" />
+  <node pkg="tf" type="static_transform_publisher" name="laser_camera_broadcaster" args="0.0 0 0.0 0 0 0 $(arg tf_prefix)/laser_link $(arg tf_prefix)/camera_depth_frame 50" if="$(arg use_tf_prefix)" />
+  <node pkg="tf" type="static_transform_publisher" name="base_laser_broadcaster_from_launch_file" args="0.13 0 0.05 0 0 0 base_link laser_link 100" unless="$(arg use_tf_prefix)"/>
+  <node pkg="tf" type="static_transform_publisher" name="base_laser_broadcaster_from_launch_file" args="0.13 0 0.05 0 0 0 $(arg tf_prefix)/base_link $(arg tf_prefix)/laser_link 100" if="$(arg use_tf_prefix)"/>
 
   <!-- LiDAR Driver -->
   <node name="sick_node" pkg="sicks300" type="sick300_driver" >
-	<remap from="laserscan" to="scan" />
+	  <remap from="laserscan" to="scan" />
   </node>
 
   <!-- Camera driver -->
   <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" />
 
   <!-- Start-up joystick node in order to steer the robot with a joystick -->
-  <include file="$(find rto_teleop)/launch/joystick_teleop.launch" />
+  <include file="$(find teleop_twist_joy)/launch/teleop.launch" />
 
 </launch>
