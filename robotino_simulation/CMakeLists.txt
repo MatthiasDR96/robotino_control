@@ -2,19 +2,16 @@
 # Set minimum required version of cmake, project name and compile options
 ################################################################################
 cmake_minimum_required(VERSION 2.8.3)
-project(robotino_core)
+project(robotino_simulation)
 
 ################################################################################
 # Find catkin packages and libraries for catkin and system dependencies
 ################################################################################
-find_package(catkin REQUIRED COMPONENTS
-  rospy
-)
+find_package(catkin REQUIRED)
 
 ################################################################################
 # Setup for python modules and scripts
 ################################################################################
-catkin_python_setup()
 
 ################################################################################
 # Declare ROS messages, services and actions
@@ -36,9 +33,8 @@ catkin_package()
 ################################################################################
 # Install
 ################################################################################
-install(PROGRAMS 
-  nodes/robotino_core_node
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+install(DIRECTORY launch worlds
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 )
 
 ################################################################################

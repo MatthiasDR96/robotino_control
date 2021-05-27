@@ -2,17 +2,18 @@
 
 import rospy
 import tf
+import math
 import numpy as np
 from math import sqrt, pow, pi, atan2
 from geometry_msgs.msg import Twist, Point
 from sensor_msgs.msg import LaserScan
+from tf.transformations import euler_from_quaternion
 
 class PatrolStop():
 
     def __init__(self):
 
         # Init node
-        rospy.init_node('robotino_patrol_stop', anonymous=False)
         rospy.on_shutdown(self.shutdown)
 
         # Init publisher
@@ -36,10 +37,6 @@ class PatrolStop():
         # Init transfrom listener
         self.tf_listener = tf.TransformListener()
 
-        # Create destination point
-        self.position = Point()
-        self.move_cmd = Twist()
-
         # Cycle rate
         self.r = rospy.Rate(10)
 
@@ -58,99 +55,48 @@ class PatrolStop():
 
     def go_to_point(self, point):
 
-        # Get points in roi from laser data
-        [points_in_left_roi, points_in_right_roi] = self.compute_cartesian_from_laser() 
-
-        # Collision avoidance
-        if (points_in_right_roi + points_in_left_roi) > self.threshold:
-            cmd = Twist()
-            self.cmd_pub.publish(cmd)
-        else:
-            [vel, omega] = self.go_to_goal(point)
-            cmd = Twist()
-            cmd.linear.x = vel
-            cmd.angular.z = omega
-            self.cmd_pub.publish(cmd)
-
-    def go_to_goal(self, goal):
-
         # Get current position and theta
         (position, rotation) = self.get_odom()
 
         # Get required position (z = theta)
-        (goal_x, goal_y, goal_z) = goal
-        goal_z = np.deg2rad(goal_z)
+        goal_x = point['x']
+        goal_y = point['y']
 
         # Compute distance to goal
-        goal_distance = sqrt(pow(goal_x - position.x, 2) + pow(goal_y - position.y, 2))
-        distance = goal_distance
+        distance = sqrt(pow(goal_x - position.x, 2) + pow(goal_y - position.y, 2))
 
         # Drive towards goal
-        last_rotation = 0
-        while distance > 0.05:
+        while distance > self.pos_tol:
 
             # Get position
-            (position, rotation) = self.get_odom()
+            (position, _) = self.get_odom()
             x_start = position.x
             y_start = position.y
-            path_angle = atan2(goal_y - y_start, goal_x- x_start)
 
-            # Normalize angle
-            if path_angle < -pi/4 or path_angle > pi/4:
-                if goal_y < 0 and y_start < goal_y:
-                    path_angle = -2*pi + path_angle
-                elif goal_y >= 0 and y_start > goal_y:
-                    path_angle = 2*pi + path_angle
-            if last_rotation > pi-0.1 and rotation <= 0:
-                rotation = 2*pi + rotation
-            elif last_rotation < -pi+0.1 and rotation > 0:
-                rotation = -2*pi + rotation
-            
-            # Compute angular velocity
-            self.move_cmd.angular.z = self.k_alpha * path_angle - rotation
-            if self.move_cmd.angular.z > 0:
-                self.move_cmd.angular.z = min(self.move_cmd.angular.z, 1.5)
-            else:
-                self.move_cmd.angular.z = max(self.move_cmd.angular.z, -1.5)
-            last_rotation = rotation
+            # Get goal angle
+            alpha = self.normalizeAngle(atan2(goal_y - y_start, goal_x- x_start))
 
-            # Compute linear velocity
+            # Get goal distance
             distance = sqrt(pow((goal_x - x_start), 2) + pow((goal_y - y_start), 2))
-            self.move_cmd.linear.x = min(self.k_rho * distance, self.max_vel)
-
-            # Publish twist
-            self.cmd_vel.publish(self.move_cmd)
-            self.r.sleep()
-
-        # Get position
-        (position, rotation) = self.get_odom()
-
-        # Turn to goal
-        while abs(rotation - goal_z) > 0.05:
-
-            # Get position
-            (position, rotation) = self.get_odom()
-            if goal_z >= 0:
-                if rotation <= goal_z and rotation >= goal_z - pi:
-                    self.move_cmd.linear.x = 0.00
-                    self.move_cmd.angular.z = 0.5
-                else:
-                    self.move_cmd.linear.x = 0.00
-                    self.move_cmd.angular.z = -0.5
+            
+            # Calculate contol output
+            omega = self.Kalpha * alpha  # + Kbeta * beta
+            if abs(alpha) > self.ang_tol:
+                vu = 0.0
             else:
-                if rotation <= goal_z + pi and rotation > goal_z:
-                    self.move_cmd.linear.x = 0.00
-                    self.move_cmd.angular.z = -0.5
-                else:
-                    self.move_cmd.linear.x = 0.00
-                    self.move_cmd.angular.z = 0.5
+                vu = self.Krho * distance
 
-            # Publish twist
-            self.cmd_vel.publish(self.move_cmd)
+            # Limit outputs
+            vu = min(vu, self.max_vel)
+
+            # Publish
+            cmd = Twist()
+            cmd.linear.x = vu
+            cmd.angular.z = omega
+            self.cmd_pub.publish(cmd)
             self.r.sleep()
 
         # Publish zero twist
-        rospy.loginfo("Stopping the robot...")
         self.cmd_vel.publish(Twist())
 
 
@@ -189,13 +135,33 @@ class PatrolStop():
         
         return [points_in_left_roi, points_in_right_roi]
 
+    def get_odom(self):
+        try:
+            self.tf_listener.waitForTransform('odom', 'base_link', rospy.Time(), rospy.Duration(1.0))
+        except (tf.Exception, tf.ConnectivityException, tf.LookupException):
+            rospy.loginfo("Cannot find transform between odom and base_link")
+            rospy.signal_shutdown("tf Exception")
+        try:
+            (trans, rot) = self.tf_listener.lookupTransform('odom', 'base_link', rospy.Time(0))
+            rotation = euler_from_quaternion(rot)
+        except (tf.Exception, tf.ConnectivityException, tf.LookupException):
+            rospy.loginfo("TF Exception")
+            return
+        return (Point(*trans), rotation[2])
+
     def shutdown(self):
         self.cmd_vel.publish(Twist())
         rospy.sleep(1)
 
+    @staticmethod
+    def normalizeAngle(angle):
+        angle1 = math.atan2(math.sin(angle), math.cos(angle))
+        return angle1
+
 if __name__ == '__main__':
 
     try:
+        rospy.init_node('robotino_patrol_stop', anonymous=False)
         PatrolStop()
         rospy.spin()
     except:

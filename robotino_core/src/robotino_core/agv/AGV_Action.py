@@ -1,24 +1,67 @@
-import time
-
+import rospy
+import actionlib
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 
 class Action:
 
     def __init__(self, agv):
+
+        # Agv
         self.agv = agv
+
+        # Action client
+        self.client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
 
     def move_to_node(self, node):
         
+        # Connect to server
         print("AGV " + str(self.agv.id) + ":        Move to node " + node)
-        node_position = self.agv.graph.nodes[node].pos
-        time.sleep(2)
+        wait = self.client.wait_for_server(rospy.Duration(5.0))
+        if not wait:
+            rospy.logerr("Action server not available!")
+            rospy.signal_shutdown("Action server not available!")
+            return
 
-        self.agv.node = node
-        self.agv.x_loc = node_position[0]
-        self.agv.y_loc = node_position[1]
-        self.agv.path = self.agv.path[1:]
-        # self.agv.slots = self.agv.slots[1:]
-        self.agv.update_global_robot_list()
-        print("AGV " + str(self.agv.id) + ":        Moved to node " + node)
+        # Create goal
+        goal = MoveBaseGoal()
+        goal.target_pose.header.frame_id = "map"
+        goal.target_pose.header.stamp = rospy.Time.now()
+        goal.target_pose.pose.position.x = 0.5
+        goal.target_pose.pose.position.y = 0.5
+        goal.target_pose.pose.orientation.w = 1.0
+
+        # Send goal
+        self.client.send_goal(goal)
+        wait = self.client.wait_for_result()
+        if not wait:
+            rospy.logerr("Action server not available!")
+            rospy.signal_shutdown("Action server not available!")
+        else:
+            return self.client.get_result()
+
+    def active_cb(self):
+        rospy.loginfo("Goal pose is now being processed by the Action Server...")
+
+    def feedback_cb(self, feedback):
+        rospy.loginfo("Feedback for goal pose received: " + str(feedback))
+
+    def done_cb(self, status, result):
+        if status == 2:
+            rospy.loginfo("Goal pose received a cancel request after it started executing, completed execution!")
+        if status == 3:
+            rospy.loginfo("Goal pose reached") 
+            rospy.signal_shutdown("Final goal pose reached!")
+            return
+        if status == 4:
+            rospy.loginfo("Goal pose was aborted by the Action Server")
+            rospy.signal_shutdown("Goal pose aborted, shutting down!")
+            return
+        if status == 5:
+            rospy.loginfo("Goal pose has been rejected by the Action Server")
+            rospy.signal_shutdown("Goal pose rejected, shutting down!")
+            return
+        if status == 8:
+            rospy.loginfo("Goal pose received a cancel request before it started executing, successfully cancelled!")
 
     def pick(self):
         print("AGV " + str(self.agv.id) + ":        Pick")

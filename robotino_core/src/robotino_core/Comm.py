@@ -108,32 +108,32 @@ class Comm:
         return self._cursor.lastrowid
 
     def sql_select_from_table(self, name, criterium, value):
-        connection.reconnect()
+        self._conn.reconnect()
         sql = "SELECT * FROM {} WHERE {} = %s".format(name, criterium) + " ORDER BY id"
         val = (value,)
-        with connection.cursor(buffered=True) as cursor:
+        with self._conn.cursor(buffered=True) as cursor:
             cursor.execute(sql, val)
             result = cursor.fetchall()
         return result
 
     def sql_select_everything_from_table(self, name):
-        connection.reconnect()
+        self._conn.reconnect()
         sql = "SELECT * FROM {}".format(name) + " ORDER BY id"
-        with connection.cursor(buffered=True) as cursor:
+        with self._conn.cursor(buffered=True) as cursor:
             cursor.execute(sql)
             result = cursor.fetchall()
         return result
 
     def sql_delete_from_table(self, name, criterium, value):
-        connection.reconnect()
+        self._conn.reconnect()
         sql = "DELETE FROM {} WHERE {} = %s".format(name, criterium)
         val = (value,)
-        with connection.cursor(buffered=True) as cursor:
+        with self._conn.cursor(buffered=True) as cursor:
             cursor.execute(sql, val)
-            connection.commit()
+            self._conn.commit()
 
     def sql_delete_everything_from_table(self, name):
-        connection.reconnect()
+        self._conn.reconnect()
         sql = "DELETE FROM {}".format(name)
         with connection.cursor(buffered=True) as cursor:
             cursor.execute(sql)

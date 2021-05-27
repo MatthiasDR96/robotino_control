@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+
+import rospy
+from robotino_msgs.msg import DigitalReadings
+
+
+class RobotinoStatus:
+
+    def __init__(self):
+
+        # Define publishers
+        self.digital_pub = rospy.Publisher("/set_digital_values", DigitalReadings, queue_size=10)
+
+        # Define subscribers
+        self.digital_sub = rospy.Subscriber("/digital_readings", DigitalReadings, self.digital_readings_callback)
+
+        # Status
+        self.light_status = [False, False, True]  # Red, orange, green
+        self.emergency_button_status = False
+        self.conveyor_sensor_status = False
+        self.reset_button_status = False
+        self.battery_status = 100
+        self.x_loc = 0.0
+        self.y_loc = 0.0
+        self.theta = 0.0
+        self.node = None
+            
+
+    def digital_readings_callback(self, msg):
+
+        # Read inputs
+        self.light_status = [msg.values[2], msg.values[3], msg.values[4]]
+        self.emergency_button_status = msg.values[0]
+        self.conveyor_sensor_status = msg.values[2]
+        self.reset_button_status = msg.values[4]
+
+        # Check emergency button
+        if not self.emergency_button_status:
+            self.light_status[0] = False
+        else:
+            self.light_status[0] = True
+
+        # Publish
+        msg.values[3] = self.light_status[0]
+        self.digital_pub.publish(msg)
+
+
+if __name__ == '__main__':
+    try:
+        rospy.init_node('robotino_status_node')
+        RobotinoStatus()
+        rospy.spin()
+    except:
+        rospy.loginfo("Shutdown program.")

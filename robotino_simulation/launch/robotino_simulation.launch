@@ -11,7 +11,7 @@
 
     <!-- Gazebo simulator -->
     <include file="$(find gazebo_ros)/launch/empty_world.launch">
-        <arg name="world_name" value="$(find rto_worlds)/worlds/$(arg robot_env).world"/> 
+        <arg name="world_name" value="$(find robotino_simulation)/worlds/$(arg robot_env).world"/> 
         <arg name="paused" value="false"/>
         <arg name="use_sim_time" value="true"/>
         <arg name="gui" value="true"/>
@@ -28,10 +28,6 @@
     <node pkg="gazebo_ros" type="spawn_model" name="spawn_urdf"  args="-urdf -model rto-1 -x $(arg x_pos) -y $(arg y_pos) -z $(arg z_pos) -param robot_description" />
 
     <!-- Keyboard Teleop Node -->
-	<node pkg="rto_teleop" type="keyboard_teleop_node"
-		name="keyboard_teleop_node" output="screen" >
-		<param name="scale_linear" value="2.0" type="double" />
-		<param name="scale_angular" value="1.0" type="double" />
-	</node>
+	<node pkg="rto_teleop_twist_keyboard" type="teleop_twist_keyboard" name="teleop_twist_keyboard"/>
 
 </launch>

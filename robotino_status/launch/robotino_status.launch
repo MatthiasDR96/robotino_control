@@ -1,0 +1,6 @@
+<launch>
+
+  <!-- Status node -->
+  <node pkg="robotino_status" type="robotino_status_node" name="robotino_status_node" output="screen"/>
+
+</launch>

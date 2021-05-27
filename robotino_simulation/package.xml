@@ -1,16 +1,18 @@
 <?xml version="1.0"?>
 <package format="2">
 
-  <name>robotino_example</name>
+  <name>robotino_simulation</name>
   <version>1.0.0</version>
-  <description>This package provides some example scripts</description>
+  <description>This package provides some roslaunch scripts for simulating the Robotino</description>
 
   <license>BSD</license>
   <author email="matthias.deryck@kuleuven.be">Matthias De Ryck</author>
   <maintainer email="matthias.deryck@kuleuven.be">Matthias De Ryck</maintainer>
 
   <buildtool_depend>catkin</buildtool_depend>
-  <depend>rospy</depend>
   <exec_depend>robotino_bringup</exec_depend>
-
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>teleop_twist_keyboard</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  
 </package>

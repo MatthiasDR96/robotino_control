@@ -23,8 +23,10 @@ class GotoPoint():
     def __init__(self):
 
         # Init node
-        rospy.init_node('robotino_pointop_key', anonymous=False)
         rospy.on_shutdown(self.shutdown)
+
+        # Init publisher
+        self.cmd_vel = rospy.Publisher('cmd_vel', Twist, queue_size=5)
 
         # Set parameters for path controller
         k_rho = rospy.get_param("/pure_pursuit/k_rho")
@@ -32,10 +34,7 @@ class GotoPoint():
         max_vel = rospy.get_param("/pure_pursuit/speed")
         pos_tol = rospy.get_param("/pure_pursuit/pos_tol")
         ang_tol = rospy.get_param("/pure_pursuit/pos_tol")
-
-        # Init publisher
-        self.cmd_vel = rospy.Publisher('cmd_vel', Twist, queue_size=5)
-
+        
         # Init transfrom listener
         self.tf_listener = tf.TransformListener()
 
@@ -158,6 +157,7 @@ class GotoPoint():
 if __name__ == '__main__':
 
     try:
+        rospy.init_node('robotino_pointop_key', anonymous=False)
         while not rospy.is_shutdown():
             print(msg)
             GotoPoint()

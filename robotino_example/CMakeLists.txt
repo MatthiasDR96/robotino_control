@@ -9,7 +9,6 @@ project(robotino_example)
 ################################################################################
 find_package(catkin REQUIRED COMPONENTS
   rospy
-  actionlib
 )
 
 ################################################################################
@@ -31,7 +30,6 @@ catkin_python_setup()
 catkin_package(
   CATKIN_DEPENDS
     rospy
-    actionlib
 )
 
 ################################################################################

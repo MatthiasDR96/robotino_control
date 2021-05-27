@@ -1,16 +1,15 @@
 <?xml version="1.0"?>
 <package format="2">
 
-  <name>robotino_example</name>
+  <name>robotino_status</name>
   <version>1.0.0</version>
-  <description>This package provides some example scripts</description>
+  <description>This package provides nodes for ensureing proper robot status</description>
 
   <license>BSD</license>
   <author email="matthias.deryck@kuleuven.be">Matthias De Ryck</author>
   <maintainer email="matthias.deryck@kuleuven.be">Matthias De Ryck</maintainer>
 
   <buildtool_depend>catkin</buildtool_depend>
-  <depend>rospy</depend>
-  <exec_depend>robotino_bringup</exec_depend>
+  <exec_depend>rospy</exec_depend>
 
 </package>
