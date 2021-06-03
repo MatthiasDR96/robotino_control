@@ -10,11 +10,10 @@ global_costmap:
   publish_frequency: 10.0
   
   # Map management params
-  rolling_window: false
+  rolling_window: true
   always_send_full_costmap: true
 
   #Static map
-  static_map: true
   unknown_cost_value: -1
   lethal_cost_threshold: 100
   map_topic: /map

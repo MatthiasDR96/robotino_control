@@ -1,7 +1,7 @@
 local_costmap:
 
   # Coordinate frame and tf params
-  global_frame: odom
+  global_frame: map
   robot_base_frame: base_link
   transform_tolerance: 0.5  
 
@@ -14,7 +14,6 @@ local_costmap:
   always_send_full_costmap: false
 
   # Dynamic map
-  static_map: false
   width: 3
   height: 3
   origin_x: -3.0

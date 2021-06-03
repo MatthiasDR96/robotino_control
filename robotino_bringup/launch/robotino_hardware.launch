@@ -1,26 +1,26 @@
 <launch>
 
   <!-- Arguments -->
-  <arg name="hostname" default="127.0.0.1" />
+  <arg name="hostname" default="0.0.0.0" />
 
   <!-- Robotino description -->
   <include file="$(find robotino_bringup)/launch/includes/description.launch.xml"/>
 
   <!-- Robotino bringup -->
-	<include file="$(find robotino_node)/launch/robotino_simple_node.launch" >
-		<arg name="hostname" value="$(arg hostname)" />
-	</include>
+  <include file="$(find robotino_node)/launch/robotino_simple_node.launch" >
+    <arg name="hostname" value="$(arg hostname)" />
+  </include>
 
   <!-- LiDAR Driver -->
   <node name="sick_node" pkg="sicks300" type="sick300_driver" >
 	  <remap from="laserscan" to="scan" />
   </node>
 
-  <!-- Camera driver -->
-  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" />
+  <!-- Camera driver 
+  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" />  -->
 
-  <!-- Joystick driver -->
-  <include file="$(find teleop_twist_joy)/launch/teleop.launch" />
+  <!-- Joystick driver 
+  <include file="$(find teleop_twist_joy)/launch/teleop.launch" />  -->
 
   <!-- Light service 
   <include file="$(find robotino_light)/launch/robotino_light.launch" />  -->
