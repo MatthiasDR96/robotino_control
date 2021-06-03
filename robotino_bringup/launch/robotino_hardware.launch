@@ -16,16 +16,15 @@
 	  <remap from="laserscan" to="scan" />
   </node>
 
-  <!-- Camera driver 
-  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" />  -->
+  <!-- Camera driver -->
+  <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" > 
+  	<rosparam file="$(find robotino_navigation)/param/camera_params.yaml" command="load" />
+  </node>
 
-  <!-- Joystick driver 
-  <include file="$(find teleop_twist_joy)/launch/teleop.launch" />  -->
+  <!-- Joystick driver -->
+  <include file="$(find teleop_twist_joy)/launch/teleop.launch" />  
 
-  <!-- Light service 
-  <include file="$(find robotino_light)/launch/robotino_light.launch" />  -->
-
-  <!-- Status 
-  <include file="$(find robotino_status)/launch/robotino_status.launch" />  -->
+  <!-- Status -->
+  <include file="$(find robotino_status)/launch/robotino_status.launch" />  
 
 </launch>

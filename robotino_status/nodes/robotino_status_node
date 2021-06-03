@@ -35,13 +35,17 @@ class RobotinoStatus:
         self.reset_button_status = msg.values[4]
 
         # Check emergency button
-        if not self.emergency_button_status:
-            self.light_status[0] = False
+        if self.emergency_button_status:
+            self.light_status[1] = False
+            self.light_status[2] = True
         else:
-            self.light_status[0] = True
+            self.light_status[1] = True
+            self.light_status[2] = False
 
         # Publish
-        msg.values[3] = self.light_status[0]
+        msg.values[2] = self.light_status[0]
+        msg.values[3] = self.light_status[1]
+        msg.values[4] = self.light_status[2]
         self.digital_pub.publish(msg)
 
 
