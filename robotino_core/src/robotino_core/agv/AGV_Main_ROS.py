@@ -1,3 +1,4 @@
+import rospy
 import math
 import time
 import yaml
@@ -11,22 +12,26 @@ from agv.AGV_TaskAllocation import TaskAllocation
 from agv.AGV_ResourceManagement import ResourceManagement
 from solvers.astar_solver import find_shortest_path
 
+from nav_msgs.msg import Odometry
+from tf.transformations import euler_from_quaternion
+
 
 class AGV:
     """
         A class containing the intelligence of the agv agent
     """
 
-    def __init__(self, ip, port, loc):
+    def __init__(self, ip, port):
 
         # Init communication
-        self.ip = ip
-        self.port = port
-        self.comm = Comm(self.ip, self.port)
+        self.comm = Comm(ip, port, 'localhost', 'Robotino15', 'Robotino15', 'kb')
 
         # Read params
         with open(r'setup.yaml') as file:
             self.params = yaml.load(file, Loader=yaml.FullLoader)
+
+        # Init subscriber
+        self.status_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
 
         # Create graph
         self.graph = Graph()
@@ -76,17 +81,7 @@ class AGV:
         self.action = Action(self)
 
         # Processes
-        try:
-            print("\nAGV " + str(self.id) + ":        Started")
-            x = threading.Thread(target=TaskAllocation, args=(self,))
-            x.start()
-            y = threading.Thread(target=self.main)
-            y.start()
-            x.join()
-            y.join()
-        finally:
-            print("\nAGV " + str(self.id) + ":        Stopped")
-            self.__del__()
+        self.main()
 
     def __del__(self):
         # Remove robot from database
@@ -99,7 +94,7 @@ class AGV:
 
     def main(self):
 
-        while True:
+        while not rospy.is_shutdown():
 
             # Wait for a task on the local task list
             print("Agv " + str(self.id) + ":        Waiting for tasks...")
@@ -144,7 +139,8 @@ class AGV:
 
         # Move from node to node
         while len(self.path) > 0:
-            self.action.move_to_node(self.path[0])
+            result = self.action.move_to_node(self.path[0])
+            if result: rospy.loginfo("Goal execution done!")
 
     def update_global_robot_list(self):
         robot_dict = {"x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
@@ -159,3 +155,15 @@ class AGV:
     @staticmethod
     def calculate_euclidean_distance(a, b):
         return math.sqrt(math.pow(b[0] - a[0], 2) + math.pow(b[1] - a[1], 2))
+
+    def odom_callback(self, msg):
+
+        # Get position
+        self.x_loc = msg.pose.pose.position.x
+        self.y_loc = msg.pose.pose.position.y
+
+        # Get orientation
+        orientation_q = msg.pose.pose.orientation
+        orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
+        (_, _, yaw) = euler_from_quaternion (orientation_list)
+        self.theta = yaw
