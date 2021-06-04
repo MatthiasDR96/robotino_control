@@ -36,9 +36,11 @@ class RobotinoStatus:
 
         # Check emergency button
         if self.emergency_button_status:
+            self.light_status[0] = False
             self.light_status[1] = False
             self.light_status[2] = True
         else:
+            self.light_status[0] = False
             self.light_status[1] = True
             self.light_status[2] = False
 

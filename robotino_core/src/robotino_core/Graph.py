@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
-from EnvironmentalAgent import EnvironmentalAgent
+from robotino_core.EnvironmentalAgent import EnvironmentalAgent
 
 
 class Graph:

@@ -1,0 +1,15 @@
+<launch>
+
+  <!-- Arguments -->
+  <arg name="hostname" default="0.0.0.0" />
+
+  <!-- Robotino hardware -->
+  <include file="$(find robotino_bringup)/launch/robotino_hardware.launch"/>
+
+  <!-- Robotino navigation -->
+  <include file="$(find robotino_bringup)/launch/robotino_navigation.launch"/>
+
+  <!-- Robotino visualization -->
+  <include file="$(find robotino_bringup)/launch/robotino_visualization.launch"/> 
+
+</launch>

@@ -1,27 +1,10 @@
 global_costmap:
-
-  # Coordinate frame and tf params
   global_frame: map
   robot_base_frame: base_link
-  transform_tolerance: 0.5
 
-  # Rate params
   update_frequency: 10.0
   publish_frequency: 10.0
-  
-  # Map management params
-  rolling_window: true
-  always_send_full_costmap: true
+  transform_tolerance: 0.5
 
-  #Static map
-  unknown_cost_value: -1
-  lethal_cost_threshold: 100
-  map_topic: /map
-  first_map_only: false
-  subscribe_to_updates: false
-  track_unknown_space: true
-  use_maximum: false
-  trinary_costmap: true
-
-  
+  static_map: true
  

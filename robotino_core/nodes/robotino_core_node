@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 import rospy
-from robotino_core.agv.AGV_Main import AGV
+from robotino_core.agv.AGV_Main_ROS import AGV
 
 if __name__ == '__main__':
 
-    # Init AGV object
-    try:
-        AGV()
-    except:
-        rospy.loginfo("Shutdown program.")
+	# Init AGV object
+	rospy.init_node('robotino15_node')
+	AGV('localhost', 10001, 15, '172.21.212.136', 'Robotino15', 'Robotino15', 'kb')
+	rospy.spin()
+    

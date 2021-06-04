@@ -1,16 +1,14 @@
 import rospy
 import math
-import time
 import yaml
-import threading
 
-from Comm import Comm
-from Graph import Graph
-from agv.AGV_Action import Action
-from agv.AGV_Routing import Routing
-from agv.AGV_TaskAllocation import TaskAllocation
-from agv.AGV_ResourceManagement import ResourceManagement
-from solvers.astar_solver import find_shortest_path
+from robotino_core.Comm import Comm
+from robotino_core.Graph import Graph
+from robotino_core.agv.AGV_Action_ROS import Action
+from robotino_core.agv.AGV_Routing import Routing
+from robotino_core.agv.AGV_TaskAllocation import TaskAllocation
+from robotino_core.agv.AGV_ResourceManagement import ResourceManagement
+from robotino_core.solvers.astar_solver import find_shortest_path
 
 from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
@@ -21,17 +19,20 @@ class AGV:
         A class containing the intelligence of the agv agent
     """
 
-    def __init__(self, ip, port):
+    def __init__(self, ip, port, id, host, user, password, database):
 
         # Init communication
-        self.comm = Comm(ip, port, 'localhost', 'Robotino15', 'Robotino15', 'kb')
+        
+        self.ip = ip
+        self.port = port
+        self.comm1 = Comm(ip, port, host, user, password, database)
+        self.comm2 = Comm(ip, port, host, user, password, database)
 
         # Read params
-        with open(r'setup.yaml') as file:
+        import os
+        rospy.loginfo(os.getcwd())
+        with open(r'params/setup.yaml') as file:
             self.params = yaml.load(file, Loader=yaml.FullLoader)
-
-        # Init subscriber
-        self.status_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
 
         # Create graph
         self.graph = Graph()
@@ -41,7 +42,7 @@ class AGV:
         self.graph.create_edges(list(self.node_names.keys()), list(self.node_names.values()))
 
         # Agv attributes
-        self.id = None
+        self.id = id
         self.speed = self.params['robot_speed']
         self.task_execution_time = self.params['task_execution_time']
         self.battery_threshold = self.params['battery_threshold']
@@ -56,10 +57,10 @@ class AGV:
         self.routing_approach = False
 
         # Updated attributes
-        self.x_loc = loc[0]
-        self.y_loc = loc[1]
+        self.x_loc = 0.0
+        self.y_loc = 0.0
         self.theta = 0.0
-        self.node = self.search_closest_node(loc)
+        self.node = self.search_closest_node((self.x_loc, self.y_loc))
         self.status = 'IDLE'
         self.battery_status = 100.0
         self.travelled_time = 0.0
@@ -70,72 +71,77 @@ class AGV:
         self.total_path = []
         
         # Add robot to database
-        robot_dict = {"ip": self.ip, "port": self.port, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
+        robot_dict = {"id": self.id, "ip": self.ip, "port": self.port, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
                 "status": self.status, "battery_status": self.battery_status, "travelled_time": self.travelled_time, "charged_time": self.charged_time,
                 "congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.path), "total_path": str(self.total_path)}
-        self.id = self.comm.sql_add_to_table('global_robot_list', robot_dict)
+        self.comm1.sql_add_to_table('global_robot_list', robot_dict)
 
         #self.task_allocation = TaskAllocation(self)
         #self.routing = Routing(self)
         #self.resource_management = ResourceManagement(self)
         self.action = Action(self)
 
+        # Init subscriber
+        self.status_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
+
+        result = self.action.move_to_node('pos_15')
+        self.action.cancel_goal()
+        if result: rospy.loginfo("Goal execution done!")
+
         # Processes
         self.main()
 
-    def __del__(self):
-        # Remove robot from database
-        print("Agv " + str(self.id) + ":        Shutting down")
-        self.comm.sql_delete_from_table('global_robot_list', 'id', self.id)
+        # Shutdown
+        rospy.on_shutdown(self.shutdown)
 
-    def sigterm_handler(self, signum, frame):
-        self.__del__()
-        raise KeyboardInterrupt
+    def shutdown(self):
+        # Remove robot from database
+        if self.id is not None:
+            rospy.loginfo("Agv " + str(self.id) + ":        Shutting down")
+            self.comm2.sql_delete_from_table('global_robot_list', 'id', self.id)
+            del self.comm1
+            del self.comm2
 
     def main(self):
 
+        rospy.loginfo("Agv " + str(self.id) + ":        Started")
         while not rospy.is_shutdown():
 
             # Wait for a task on the local task list
-            print("Agv " + str(self.id) + ":        Waiting for tasks...")
-            while self.task_executing['id'] == -1:
-                items = self.comm.sql_get_task_to_execute(self.id)
-                for row in items:
-                    self.task_executing = row
-                time.sleep(1)
+            items = self.comm2.sql_get_task_to_execute(self.id)
+            for row in items:
+                self.task_executing = row
+            
+            # Execute task
+            if not self.task_executing['id'] == -1:
 
-            # Start task
-            print("Agv " + str(self.id) + ":        Start executing task " + str(self.task_executing['id']))
-            if self.status != 'EMPTY': self.status = 'BUSY'
-            self.update_global_robot_list()
+                # Start task
+                rospy.loginfo("Agv " + str(self.id) + ":        Start executing task " + str(self.task_executing['id']))
+                if self.status != 'EMPTY': self.status = 'BUSY'
 
-            # Remove from local task list and add task to executing list
-            task_dict = {'robot': self.id, 'status': 'executing', 'message': self.task_executing['message'], 'priority': self.task_executing['priority']}
-            self.comm.sql_update_task(self.task_executing['id'], task_dict)
+                # Remove from local task list and add task to executing list
+                task_dict = {'robot': self.id, 'status': 'executing', 'message': self.task_executing['message'], 'priority': self.task_executing['priority']}
+                self.comm2.sql_update_task(self.task_executing['id'], task_dict)
 
-            # Go to task
-            self.execute_task(self.task_executing)
+                # Go to task
+                self.execute_task(self.task_executing)
 
-            # Perform task
-            self.action.pick()
-            print("Agv " + str(self.id) + ":        Picked item of task " + str(self.task_executing['id']))
+                # Perform task
+                self.action.pick()
+                rospy.loginfo("Agv " + str(self.id) + ":        Picked item of task " + str(self.task_executing['id']))
 
-            # Task executed
-            task_dict = {'robot': self.id, 'status': 'done', 'message': self.task_executing['message'], 'priority': self.task_executing['priority']}
-            self.comm.sql_update_task(self.task_executing['id'], task_dict)
-            self.task_executing = {'id': -1, 'node': None}
+                # Task executed
+                task_dict = {'robot': self.id, 'status': 'done', 'message': self.task_executing['message'], 'priority': self.task_executing['priority']}
+                self.comm2.sql_update_task(self.task_executing['id'], task_dict)
+                self.task_executing = {'id': -1, 'node': None}
 
-            # Set status to IDLE when task is done or when done charging
-            if self.status != 'EMPTY': self.status = 'IDLE'
-            self.update_global_robot_list()
+                # Set status to IDLE when task is done or when done charging
+                if self.status != 'EMPTY': self.status = 'IDLE'
 
     def execute_task(self, task):
 
         # Compute dmas path towards task destination
         self.path, _ = find_shortest_path(self.graph, self.node, task['node'])
-
-        # Update state
-        self.update_global_robot_list()
 
         # Move from node to node
         while len(self.path) > 0:
@@ -146,7 +152,7 @@ class AGV:
         robot_dict = {"x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
                 "status": self.status, "battery_status": self.battery_status, "travelled_time": self.travelled_time, "charged_time": self.charged_time,
                 "congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.path), "total_path": str(self.total_path)}
-        self.comm.sql_update_robot(self.id, robot_dict)
+        self.comm1.sql_update_robot(self.id, robot_dict)
 
     def search_closest_node(self, loc):
         node = min(self.graph.nodes.values(), key=lambda node: self.calculate_euclidean_distance(node.pos, loc))
@@ -167,3 +173,9 @@ class AGV:
         orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
         (_, _, yaw) = euler_from_quaternion (orientation_list)
         self.theta = yaw
+
+        # Search closest node
+        self.node = self.search_closest_node((self.x_loc, self.y_loc))
+
+        # Update robot
+        self.update_global_robot_list()

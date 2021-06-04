@@ -11,11 +11,16 @@ class Action:
 
         # Action client
         self.client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+        #self.server = actionlib.SimpleActionServer('move_base', MoveBaseAction, self.active_cb, auto_start=False)
+        #self.server.start()
 
     def move_to_node(self, node):
         
-        # Connect to server
+        # Get node location
         print("AGV " + str(self.agv.id) + ":        Move to node " + node)
+        loc = self.agv.graph.nodes[node].pos
+
+        # Connect to server
         wait = self.client.wait_for_server(rospy.Duration(5.0))
         if not wait:
             rospy.logerr("Action server not available!")
@@ -26,9 +31,12 @@ class Action:
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
         goal.target_pose.header.stamp = rospy.Time.now()
-        goal.target_pose.pose.position.x = 0.5
-        goal.target_pose.pose.position.y = 0.5
-        goal.target_pose.pose.orientation.w = 1.0
+        goal.target_pose.pose.position.x = 1.0
+        goal.target_pose.pose.position.y = -3.0
+        goal.target_pose.pose.orientation.x = 1.0
+        goal.target_pose.pose.orientation.y = 0.0
+        goal.target_pose.pose.orientation.z = 0.0
+        goal.target_pose.pose.orientation.w = 0.0
 
         # Send goal
         self.client.send_goal(goal)
@@ -38,6 +46,9 @@ class Action:
             rospy.signal_shutdown("Action server not available!")
         else:
             return self.client.get_result()
+
+    def cancel_goal(self):
+        self.client.cancel_goal()
 
     def active_cb(self):
         rospy.loginfo("Goal pose is now being processed by the Action Server...")

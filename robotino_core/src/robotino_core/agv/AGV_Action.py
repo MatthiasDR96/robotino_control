@@ -17,7 +17,6 @@ class Action:
         self.agv.y_loc = node_position[1]
         self.agv.path = self.agv.path[1:]
         # self.agv.slots = self.agv.slots[1:]
-        self.agv.update_global_robot_list()
         print("AGV " + str(self.agv.id) + ":        Moved to node " + node)
 
     def pick(self):

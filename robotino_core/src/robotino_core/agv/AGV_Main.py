@@ -17,15 +17,15 @@ class AGV:
         A class containing the intelligence of the agv agent
     """
 
-    def __init__(self, ip, port, loc):
+    def __init__(self, ip, port, host, user, password, database, loc):
 
         # Init communication
         self.ip = ip
         self.port = port
-        self.comm = Comm(self.ip, self.port)
+        self.comm = Comm(ip, port, host, user, password, database)
 
         # Read params
-        with open(r'setup.yaml') as file:
+        with open(r'params/setup.yaml') as file:
             self.params = yaml.load(file, Loader=yaml.FullLoader)
 
         # Create graph

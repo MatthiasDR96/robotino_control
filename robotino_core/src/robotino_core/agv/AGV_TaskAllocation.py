@@ -1,6 +1,6 @@
-from datatypes.Bid import Bid
-from datatypes.Task import Task
-from solvers.optimal_insertion_solver import *
+from robotino_core.datatypes.Bid import Bid
+from robotino_core.datatypes.Task import Task
+from robotino_core.solvers.optimal_insertion_solver import *
 
 
 class TaskAllocation:

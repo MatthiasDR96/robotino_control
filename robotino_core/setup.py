@@ -7,7 +7,9 @@ from catkin_pkg.python_setup import generate_distutils_setup
 # fetch values from package.xml
 setup_args = generate_distutils_setup(
     packages=['robotino_core'],
-    package_dir={'': 'src'}
+    package_dir={'': 'src'},
+    include_package_data=True,
+    package_data={'': ['params/*.yaml']}
 )
 
 setup(**setup_args)

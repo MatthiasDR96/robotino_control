@@ -27,6 +27,12 @@ class Comm:
 		self.__password = password
 		self.__database = database
 
+		# Open connection
+		self.__open()
+
+	def __del__(self):
+		self.__close()
+
 	def __open(self):
 		try:
 			cnx = connect(
@@ -36,9 +42,8 @@ class Comm:
 				database = self.__database
 			)
 			self.__conn = cnx
-			self.__cursor = cnx.cursor(dictionary=True)
+			self.__cursor = cnx.cursor(dictionary=True, buffered=True)
 		except Error as e:
-			print("Matthias: Self made error while opening connection")
 			print("Error %d: %s" % (e.args[0],e.args[1]))
 
 	def __close(self):
@@ -119,28 +124,21 @@ class Comm:
 
 	def sql_create_database(self, table):
 		assert isinstance(table, str)
-		self.__open()
 		sql = "CREATE DATABASE {}".format(table)
 		self.__cursor.execute(sql)
-		self.__close()
 
 	def sql_show_databases(self):
-		self.__open()
 		sql = "SHOW DATABASES"
 		self.__cursor.execute(sql)
 		for db in self.__cursor:
 			print(db)
-		self.__close()
 
 	def sql_drop_table(self, table):
 		assert isinstance(table, str)
-		self.__open()
 		sql = "DROP TABLE IF EXISTS {}".format(table)
 		self.__cursor.execute(sql)
-		self.__close()
 
 	def sql_create_robot_table(self):
-		self.__open()
 		sql = """
 		CREATE TABLE IF NOT EXISTS global_robot_list(
 				id INT AUTO_INCREMENT PRIMARY KEY,
@@ -162,10 +160,8 @@ class Comm:
 		"""
 		self.__cursor.execute(sql)
 		self.__conn.commit()
-		self.__close()
 
 	def sql_create_task_table(self):
-		self.__open()
 		sql = """
 		CREATE TABLE IF NOT EXISTS global_task_list(
 				id INT AUTO_INCREMENT PRIMARY KEY,
@@ -178,22 +174,18 @@ class Comm:
 		"""
 		self.__cursor.execute(sql)
 		self.__conn.commit()
-		self.__close()
 
 	def sql_show_table(self, table):
 		assert isinstance(table, str)
-		self.__open()
 		sql = "DESCRIBE {}".format(table)
 		self.__cursor.execute(sql)
 		result = self.__cursor.fetchall()
 		for row in result:
 			print(row)
-		self.__close()
 
 	def sql_add_to_table(self, table, item):
 		assert isinstance(table, str)
 		assert isinstance(item, dict)
-		self.__open()
 		fields = ', '.join(item.keys())
 		values = ', '.join(["%s"]*len(item.values()))
 		sql = 'INSERT INTO {} ({fields}) VALUES ({values})'.format(table, fields=fields, values=values)
@@ -207,72 +199,63 @@ class Comm:
 				print("Database not alive")
 				time.sleep(1)
 		result = self.__cursor.lastrowid
-		self.__close()
 		return result
 
 	def sql_select_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
 		assert isinstance(criterium, str)
 		assert isinstance(value, str)
-		self.__open()
+		self.__conn.reconnect()
 		sql = "SELECT * FROM {} WHERE {} = %s".format(table, criterium) + " ORDER BY id"
 		val = (value,)
 		self.__cursor.execute(sql, val)
 		result = self.__cursor.fetchall()
-		self.__close()
 		return result
 
 	def sql_select_everything_from_table(self, table):
 		assert isinstance(table, str)
-		self.__open()
+		self.__conn.reconnect()
 		sql = "SELECT * FROM {}".format(table) + " ORDER BY id"
 		self.__cursor.execute(sql)
 		result = self.__cursor.fetchall()
-		self.__close()
 		return result
 
 	def sql_delete_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
 		assert isinstance(criterium, str)
-		assert isinstance(value, str)
-		self.__open()
+		assert isinstance(value, int)
 		sql = "DELETE FROM {} WHERE {} = %s".format(table, criterium)
 		val = (value,)
 		self.__cursor.execute(sql, val)
 		self.__conn.commit()
-		self.__close()
 
 	def sql_delete_everything_from_table(self, table):
 		assert isinstance(table, str)
 		assert isinstance(table, str)
-		self.__open()
 		sql = "DELETE FROM {}".format(table)
 		self.__cursor.execute(sql)
 		self.__conn.commit()
-		self.__close()
 
 	def sql_get_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
-		self.__open()
+		self.__conn.reconnect()
 		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'assigned' ORDER BY id"
 		val = (robot_id,)
 		self.__cursor.execute(sql, val)
 		result = self.__cursor.fetchall()
-		self.__close()
 		return result
 
 	def sql_delete_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
-		self.__open()
+		self.__conn.reconnect()
 		sql = "DELETE FROM global_task_list WHERE robot = %s AND status = 'assigned'"
 		val = (robot_id,)
 		self.__cursor.execute(sql, val)
 		self.__conn.commit()
-		self.__close()
 
 	def sql_get_task_to_execute(self, robot_id):
 		assert isinstance(robot_id, int)
-		self.__open()
+		self.__conn.reconnect()
 		try:
 			sql = "SELECT * FROM global_task_list WHERE robot = %s AND priority = 1 AND status = 'assigned'"
 			val = (robot_id,)
@@ -281,13 +264,11 @@ class Comm:
 		except:
 			print("Database not alive")
 			result = []		
-		self.__close()
 		return result
 
 	def sql_update_robot(self, id, robot): 
 		assert isinstance(id, int)
 		assert isinstance(robot, dict)
-		self.__open()
 		sql = """UPDATE
 					global_robot_list
 				SET
@@ -309,12 +290,10 @@ class Comm:
 		val = tuple(robot.values())
 		self.__cursor.execute(sql, val)
 		self.__conn.commit()
-		self.__close()
 
 	def sql_update_task(self, id, task):
 		assert isinstance(id, int)
 		assert isinstance(task, dict)
-		self.__open()
 		sql = """UPDATE 
 					global_task_list 
 				SET 
@@ -328,10 +307,8 @@ class Comm:
 		val = tuple(task.values())
 		self.__cursor.execute(sql, val)
 		self.__conn.commit()
-		self.__close()
 
 	def sql_update_tasks(self, task_id, robot_id, status, message, priority):
-		self.__open()
 		sql = """UPDATE 
 					global_task_list 
 				SET 
@@ -343,13 +320,10 @@ class Comm:
 					id = %s
 				""".format(task_id)
 		val = [tuple(robot_id[i], status, message, priority[i], task_id[i]) for i in range(len(task_id))]
-		print(val)
 		self.__cursor.execute(sql, val)
 		self.__conn.commit()
-		self.__close()
 
 	def print_database(self):
-		self.__open()
 		sql = "SELECT * FROM global_task_list"
 		self.__cursor.execute(sql)
 		print('Task list')
@@ -361,5 +335,4 @@ class Comm:
 		for row in self.__cursor:
 			print('\t' + str(row))
 		print()
-		self.__close()
 
