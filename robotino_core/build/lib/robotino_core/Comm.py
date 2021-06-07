@@ -26,7 +26,6 @@ class Comm:
 		self.__user = user
 		self.__password = password
 		self.__database = database
-		self.sock_server = None
 
 		# Open connection
 		self.__open()
@@ -50,23 +49,22 @@ class Comm:
 	def __close(self):
 		self.__cursor.close()
 		self.__conn.close()
-		if self.sock_server: self.sock_server.close() 
 
 	def tcp_server(self):
 
 		# Create a TCP/IP socket
-		self.sock_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 		# Bind address to socket
-		self.sock_server.bind((self.ip, self.port))
+		sock.bind((self.ip, self.port))
 
 		# Actas server
-		self.sock_server.listen()
+		sock.listen()
 
 		try:
 
 			# New connection
-			connection, _ = self.sock_server.accept()
+			connection, _ = sock.accept()
 			
 			# Receive the data in small chunks and retransmit it
 			data = b""
@@ -143,7 +141,7 @@ class Comm:
 	def sql_create_robot_table(self):
 		sql = """
 		CREATE TABLE IF NOT EXISTS global_robot_list(
-				id INT UNIQUE,
+				id INT AUTO_INCREMENT PRIMARY KEY,
 				ip VARCHAR(100),
 				port INT,
 				x_loc FLOAT,
@@ -190,7 +188,7 @@ class Comm:
 		assert isinstance(item, dict)
 		fields = ', '.join(item.keys())
 		values = ', '.join(["%s"]*len(item.values()))
-		sql = 'INSERT IGNORE INTO {} ({fields}) VALUES ({values})'.format(table, fields=fields, values=values)
+		sql = 'INSERT INTO {} ({fields}) VALUES ({values})'.format(table, fields=fields, values=values)
 		val = tuple(item.values())
 		while True:
 			try:
@@ -199,12 +197,14 @@ class Comm:
 				break
 			except:
 				print("Database not alive")
+				time.sleep(1)
 		result = self.__cursor.lastrowid
 		return result
 
 	def sql_select_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
 		assert isinstance(criterium, str)
+		assert isinstance(value, str)
 		self.__conn.reconnect()
 		sql = "SELECT * FROM {} WHERE {} = %s".format(table, criterium) + " ORDER BY id"
 		val = (value,)
@@ -239,7 +239,7 @@ class Comm:
 	def sql_get_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
 		self.__conn.reconnect()
-		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'assigned' ORDER BY priority"
+		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'assigned' ORDER BY id"
 		val = (robot_id,)
 		self.__cursor.execute(sql, val)
 		result = self.__cursor.fetchall()
@@ -247,14 +247,24 @@ class Comm:
 
 	def sql_delete_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
+		self.__conn.reconnect()
 		sql = "DELETE FROM global_task_list WHERE robot = %s AND status = 'assigned'"
 		val = (robot_id,)
+		self.__cursor.execute(sql, val)
+		self.__conn.commit()
+
+	def sql_get_task_to_execute(self, robot_id):
+		assert isinstance(robot_id, int)
+		self.__conn.reconnect()
 		try:
-			self.__conn.reconnect()
+			sql = "SELECT * FROM global_task_list WHERE robot = %s AND priority = 1 AND status = 'assigned'"
+			val = (robot_id,)
 			self.__cursor.execute(sql, val)
-			self.__conn.commit()
+			result = self.__cursor.fetchall()
 		except:
-			print("Database not alive1")
+			print("Database not alive")
+			result = []		
+		return result
 
 	def sql_update_robot(self, id, robot): 
 		assert isinstance(id, int)
@@ -262,7 +272,6 @@ class Comm:
 		sql = """UPDATE
 					global_robot_list
 				SET
-					id = %s,
 					x_loc = %s,
 					y_loc = %s,
 					theta = %s,
@@ -279,12 +288,8 @@ class Comm:
 					id = {}
 				""".format(id)
 		val = tuple(robot.values())
-		try:
-			self.__cursor.execute(sql, val)
-			self.__conn.commit()
-		except:
-			print("Database not alive3")	
-			pass
+		self.__cursor.execute(sql, val)
+		self.__conn.commit()
 
 	def sql_update_task(self, id, task):
 		assert isinstance(id, int)
@@ -300,14 +305,10 @@ class Comm:
 					id = {}
 				""".format(id)
 		val = tuple(task.values())
-		try:
-			self.__cursor.execute(sql, val)
-			self.__conn.commit()
-		except:
-			print("Database not alive4")	
+		self.__cursor.execute(sql, val)
+		self.__conn.commit()
 
-	def sql_update_tasks(self, tasks):
-		assert isinstance(tasks, list)
+	def sql_update_tasks(self, task_id, robot_id, status, message, priority):
 		sql = """UPDATE 
 					global_task_list 
 				SET 
@@ -317,13 +318,10 @@ class Comm:
 					priority = %s 
 				WHERE 
 					id = %s
-				"""
-		val = tasks
-		try:
-			self.__cursor.executemany(sql, val)
-			self.__conn.commit()
-		except:
-			print("Database not alive5")	
+				""".format(task_id)
+		val = [tuple(robot_id[i], status, message, priority[i], task_id[i]) for i in range(len(task_id))]
+		self.__cursor.execute(sql, val)
+		self.__conn.commit()
 
 	def print_database(self):
 		sql = "SELECT * FROM global_task_list"

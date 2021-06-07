@@ -20,6 +20,7 @@ class Action:
         print("AGV " + str(self.agv.id) + ":        Moved to node " + node)
 
     def pick(self):
+        time.sleep(5)
         print("AGV " + str(self.agv.id) + ":        Pick")
 
     def place(self):

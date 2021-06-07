@@ -1,8 +1,7 @@
 from pyswarm import pso
 
-from robotino_core.datatypes.Task import Task
-from robotino_core.solvers.genetic_algorithm_solver import *
-from robotino_core.solvers.optimal_insertion_solver import *
+from solvers.genetic_algorithm_solver import *
+from solvers.tsp_solver import *
 
 
 class ResourceManagement:

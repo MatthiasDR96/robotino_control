@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 
-from robotino_core.solvers.feasibility_ant_solver import *
+from solvers.feasibility_ant_solver import *
 
 
 class Routing:

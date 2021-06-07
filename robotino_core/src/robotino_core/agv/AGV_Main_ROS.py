@@ -28,8 +28,6 @@ class AGV:
         self.comm2 = Comm(ip, port, host, user, password, database)
 
         # Read params
-        import os
-        rospy.loginfo(os.getcwd())
         with open(r'params/setup.yaml') as file:
             self.params = yaml.load(file, Loader=yaml.FullLoader)
 
@@ -82,10 +80,6 @@ class AGV:
 
         # Init subscriber
         self.status_sub = rospy.Subscriber("/odom", Odometry, self.odom_callback)
-
-        result = self.action.move_to_node('pos_15')
-        self.action.cancel_goal()
-        if result: rospy.loginfo("Goal execution done!")
 
         # Processes
         self.main()
@@ -148,9 +142,10 @@ class AGV:
             if result: rospy.loginfo("Goal execution done!")
 
     def update_global_robot_list(self):
-        robot_dict = {"x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
+        robot_dict = {"id": self.id, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
                 "status": self.status, "battery_status": self.battery_status, "travelled_time": self.travelled_time, "charged_time": self.charged_time,
                 "congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.path), "total_path": str(self.total_path)}
+        self.comm1.sql_add_to_table('global_robot_list', robot_dict)
         self.comm1.sql_update_robot(self.id, robot_dict)
 
     def search_closest_node(self, loc):
