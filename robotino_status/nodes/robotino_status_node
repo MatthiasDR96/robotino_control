@@ -24,7 +24,6 @@ class RobotinoStatus:
         self.y_loc = 0.0
         self.theta = 0.0
         self.node = None
-            
 
     def digital_readings_callback(self, msg):
 

@@ -22,7 +22,6 @@ class AGV:
     def __init__(self, ip, port, id, host, user, password, database):
 
         # Init communication
-        
         self.ip = ip
         self.port = port
         self.comm1 = Comm(ip, port, host, user, password, database)

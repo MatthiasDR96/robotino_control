@@ -14,7 +14,23 @@ elite = 0.5  # multiplier of the pheromone deposited by the elite :class:`Ant` (
 
 
 def feasibility_ant_solve(graph, start_node, nodes_to_visit):
-    """Return the single shortest path found through the given *graph*"""
+    """
+
+        Implements an ant-colony optimization to find feasible paths using randomness.
+
+        Input:
+            - Total layout graph
+            - Start node name
+            - Node to visit names
+        Output:
+            - Shortest task sequence (without starting node)
+            - Shortest route containing all tasks
+            - Distance in meters
+        Default output:
+            - [start]
+            - [start]
+            - 0
+    """
 
     # Tak deepcopy of graph
     graph = deepcopy(graph)
@@ -23,6 +39,8 @@ def feasibility_ant_solve(graph, start_node, nodes_to_visit):
     if len(nodes_to_visit) == 0:
         global_best_solution = [start_node]
         local_best_solutions = [start_node]
+        route_cost = 0
+
     else:
 
         # Reset all edge pheromones
@@ -120,7 +138,7 @@ def global_update(ants):
     """Update the amount of pheromone on each edge according to the fitness of solutions that use it."""
     ants = sorted(ants)[:len(ants) // 2]
     for a in ants:
-        p = q / a.travelled_time
+        p = q / a.travelled_time if not a.travelled_time == 0 else t0
         for edge in a.path:
             edge.pheromone = max(t0, (1 - rho) * edge.pheromone + p)
 
@@ -128,7 +146,7 @@ def global_update(ants):
 def trace_elite(ant):
     """Deposit pheromone along the path of a particular ant."""
     if elite:
-        p = elite * q / ant.travelled_time
+        p = elite * q / ant.travelled_time if not ant.travelled_time == 0 else t0
         for edge in ant.path:
             edge.pheromone += p
 
@@ -152,6 +170,9 @@ class Ant:
         self.visited = []
         self.unvisited = []
 
+        # route
+        self.route_ = []
+
     def __eq__(self, other):
         """Returns true if distances are equal"""
         return self.travelled_time == other.travelled_time
@@ -164,8 +185,19 @@ class Ant:
         self.travelled_time = 0
         self.traveled = []
         self.visited = [self.start]
+        self.route_ = [self.start]
         self.unvisited = [n for n in self.graph.nodes.keys() if n != self.start]
         return self
+
+    @property
+    def complete_route(self):
+        """Nodes traveled by the :class:`Ant` in order."""
+        return [node for node in self.route_]
+
+    @property
+    def route(self):
+        """Nodes traveled by the :class:`Ant` in order."""
+        return [node for node in self.visited]
 
     @property
     def path(self):

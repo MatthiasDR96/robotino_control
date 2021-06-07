@@ -15,15 +15,18 @@ ant_count = 10  # how many :class:`Ant`\s will be used (default=10)
 elite = 0.5  # multiplier of the pheromone deposited by the elite :class:`Ant` (default=0.5)
 
 
-def optimal_insertion_solve(graph, start_node, nodes_to_visit):
+def tsp(graph, start_node, nodes_to_visit):
     """
+
+        Implements an ant-colony optimization to solve the TSP problem. Routes between nodes are calculates using astar.
+
         Input:
             - Total layout graph
             - Start node name
             - Node to visit names
         Output:
             - Shortest task sequence (without starting node)
-            - Shortest tour containing all tasks
+            - Shortest route containing all tasks
             - Distance in meters
         Default output:
             - [start]
@@ -36,9 +39,9 @@ def optimal_insertion_solve(graph, start_node, nodes_to_visit):
 
     # If no nodes to visit, return start position
     if len(nodes_to_visit) == 0:
-        global_best_task_sequence = [start_node]
-        global_best_tour = [start_node]
-        tour_cost = 0
+        global_best_sequence = [start_node]
+        global_best_route = [start_node]
+        global_best_edges = []
 
     else:
 
@@ -50,6 +53,7 @@ def optimal_insertion_solve(graph, start_node, nodes_to_visit):
 
         # Init
         global_best = None
+        local_best_solutions = []
 
         # Create ant colony
         colony = create_colony(graph, start_node, nodes_to_visit)
@@ -60,19 +64,27 @@ def optimal_insertion_solve(graph, start_node, nodes_to_visit):
             # Perform one aco-optimization
             local_best = aco(colony)
 
-            # save global best ant
-            if global_best is None or local_best < global_best:
-                global_best = copy(local_best)
+            # If solution exists
+            if local_best:
+
+                # Save local best solution
+                if local_best.visited not in local_best_solutions:
+                    local_best_solutions.append(local_best.visited)
+
+                # save global best ant
+                if global_best is None or local_best < global_best:
+                    global_best = copy(local_best)
 
             # Raise pheromone of global best ant track
-            trace_elite(global_best)
+            if global_best:
+                trace_elite(global_best)
 
         # Save solution
-        global_best_task_sequence = global_best.tour
-        global_best_tour = global_best.complete_tour
-        tour_cost = global_best.travelled_time
+        global_best_sequence = global_best.sequence
+        global_best_route = global_best.route
+        global_best_edges = global_best.edges
 
-    return global_best_task_sequence[1:], global_best_tour, tour_cost
+    return global_best_sequence[1:], global_best_route[1:], [edge.length for edge in global_best_edges]
 
 
 def create_colony(graph, start, to_visit):
@@ -132,7 +144,7 @@ def global_update(ants):
     ants = sorted(ants)[:len(ants) // 2]
     for a in ants:
         p = q / a.travelled_time if not a.travelled_time == 0 else t0
-        for edge in a.path:
+        for edge in a.edges:
             edge.pheromone = max(t0, (1 - rho) * edge.pheromone + p)
 
 
@@ -140,7 +152,7 @@ def trace_elite(ant):
     """Deposit pheromone along the path of a particular ant."""
     if elite:
         p = elite * q / ant.travelled_time if not ant.travelled_time == 0 else t0
-        for edge in ant.path:
+        for edge in ant.edges:
             edge.pheromone += p
 
 
@@ -200,8 +212,8 @@ class Ant:
         self.visited = []
         self.unvisited = []
 
-        # Tour
-        self.tour_ = []
+        # route
+        self.route_ = []
 
     def __eq__(self, other):
         """Returns true if distances are equal"""
@@ -215,22 +227,22 @@ class Ant:
         self.travelled_time = 0
         self.traveled = []
         self.visited = [self.start]
-        self.tour_ = [self.start]
+        self.route_ = [self.start]
         self.unvisited = [n for n in self.graph.nodes if n != self.start]
         return self
 
     @property
-    def complete_tour(self):
+    def route(self):
         """Nodes traveled by the :class:`Ant` in order."""
-        return [node for node in self.tour_]
+        return [node for node in self.route_]
 
     @property
-    def tour(self):
+    def sequence(self):
         """Nodes traveled by the :class:`Ant` in order."""
         return [node for node in self.visited]
 
     @property
-    def path(self):
+    def edges(self):
         """Edges traveled by the :class:`Ant` in order."""
         return [edge for edge in self.traveled]
 
@@ -241,6 +253,7 @@ class Ant:
         set1 = set(self.to_visit)
         set2 = set(self.visited)
         visited_all = set1.issubset(set2)
+
         return not visited_all
 
     def move(self):
@@ -282,8 +295,8 @@ class Ant:
 
         edge = self.graph.edges[current_node, dest]
         self.traveled.append(edge)
-        self.tour_ += edge.nodes_in_between[1:]
         self.travelled_time += edge.length
+        self.route_ += edge.nodes_in_between[1:]
         return edge
 
     def weigh(self, edge):

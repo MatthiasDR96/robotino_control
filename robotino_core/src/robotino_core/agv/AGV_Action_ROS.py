@@ -2,6 +2,7 @@ import rospy
 import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 
+
 class Action:
 
     def __init__(self, agv):

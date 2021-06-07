@@ -4,6 +4,9 @@ from copy import deepcopy
 
 def find_shortest_path(graph, start_node, end_node):
     """
+
+        Implements the astar shortest path solver.
+
         Input:
             - Total layout graph
             - Start node name
@@ -41,7 +44,7 @@ def find_shortest_path(graph, start_node, end_node):
             distance = 0
             while current.parent:
                 path.append(current.name)
-                distance += graph.edges[current.name, current.parent.name].length
+                distance += graph.edges[current.parent.name, current.name].length
                 current = current.parent
             path.append(current.name)
             return path[::-1], distance
