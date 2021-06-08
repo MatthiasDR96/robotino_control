@@ -1,6 +1,7 @@
 from solvers.tsp_solver import tsp
 import pickle
 from Comm import Comm
+import rospy
 
 class TaskAllocation:
 	"""
@@ -10,8 +11,14 @@ class TaskAllocation:
 
 	def __init__(self, agv):
 
-		# agv
+		# Bind to agv class
 		self.agv = agv
+
+		# Init node
+		rospy.init_node('task_allocator_node')
+
+		# Run main
+		self.main()
 
 	def main(self):
 
@@ -21,7 +28,7 @@ class TaskAllocation:
 		self.comm.tcp_server_open()
 		self.comm.sql_open()
 
-		while True:
+		while not rospy.is_shutdown():
 
 			# Wait for connection
 			conn, addr = self.comm.sock_server.accept()

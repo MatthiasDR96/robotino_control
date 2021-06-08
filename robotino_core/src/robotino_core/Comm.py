@@ -1,4 +1,3 @@
-import time
 import socket
 import pickle
 from mysql.connector import connect, Error
@@ -10,89 +9,69 @@ class Comm:
 		in this library.
 	"""
 
-	__host       = None
-	__user       = None
-	__password   = None
-	__database   = None
-	__cursor     = None
-	__conn		 = None
-
 	def __init__(self, ip, port, host, user, password, database):
 
 		# Params
 		self.ip = ip
 		self.port = port
-		self.__host = host
-		self.__user = user
-		self.__password = password
-		self.__database = database
-		self.sock_server = None
+		self.host = host
+		self.user = user
+		self.password = password
+		self.database = database
 
-		# Open connection
-		self.__open()
-
-	def __del__(self):
-		self.__close()
-
-	def __open(self):
+	def sql_open(self):
 		try:
 			cnx = connect(
-				host = self.__host, 
-				user = self.__user, 
-				password = self.__password, 
-				database = self.__database
+				host = self.host, 
+				user = self.user, 
+				password = self.password, 
+				database = self.database
 			)
 			self.__conn = cnx
 			self.__cursor = cnx.cursor(dictionary=True, buffered=True)
 		except Error as e:
 			print("Error %d: %s" % (e.args[0],e.args[1]))
 
-	def __close(self):
+	def sql_close(self):
 		self.__cursor.close()
-		self.__conn.close()
-		if self.sock_server: self.sock_server.close() 
+		self.__conn.close() 
 
-	def tcp_server(self):
-
-		# Create a TCP/IP socket
+	def tcp_server_open(self):
 		self.sock_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-		# Bind address to socket
+		self.sock_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Make address reusable
 		self.sock_server.bind((self.ip, self.port))
-
-		# Actas server
 		self.sock_server.listen()
 
-		try:
+	def tcp_server_close(self):
+		self.sock_server.close()
 
-			# New connection
-			connection, _ = self.sock_server.accept()
+	def tcp_server_listen(self):
+
+		# New connection
+		conn, _ = self.sock_server.accept()
 			
-			# Receive the data in small chunks and retransmit it
-			data = b""
-			while True:
-				packet = connection.recv(16)
-				if packet:
-					data += packet
-					connection.sendall(packet)
-				else:
-					break
-					
-		finally:
-
-			# Clean up the connection
-			connection.close()
+		# Receive the data in small chunks and retransmit it
+		data = b""
+		while True:
+			packet = conn.recv(16)
+			if packet:
+				data += packet
+				conn.sendall(packet)
+			else:
+				break
 
 		# Convert data to dictionary
 		data = pickle.loads(data)
+
+		# Clean up the connection
+		conn.close()
 
 		return data
 
 	def tcp_client(self, ip, port, data):
 
-		res = False
-
 		while True:
+
 			try:
 
 				# Create a TCP/IP socket
@@ -108,21 +87,25 @@ class Comm:
 				sock.sendall(data)
 
 				# Look for the response
-				amount_expected = len(data)
-				data = b""
-				while len(data) < amount_expected:
-					packet = sock.recv(16)
-					data += packet
+				data = sock.recv(1024)
 				data = pickle.loads(data)
-				res = True
-				break
+
+				# Look for the response
+				#amount_expected = len(data)
+				#data = b""
+				#while len(data) < amount_expected:
+					#packet = sock.recv(16)
+					#data += packet
+				#data = pickle.loads(data)
+				#res = True
+				#break
 
 			except(socket.error):
 				print("\nConnection failed from " + str(self.port) + " to " + str(port) + " , retrying...")
 
 			finally:
 				sock.close()
-				return res
+				return data
 
 	def sql_create_database(self, table):
 		assert isinstance(table, str)
@@ -192,33 +175,39 @@ class Comm:
 		values = ', '.join(["%s"]*len(item.values()))
 		sql = 'INSERT IGNORE INTO {} ({fields}) VALUES ({values})'.format(table, fields=fields, values=values)
 		val = tuple(item.values())
-		while True:
-			try:
-				self.__cursor.execute(sql, val)
-				self.__conn.commit()
-				break
-			except:
-				print("Database not alive")
-		result = self.__cursor.lastrowid
-		return result
+		try:
+			self.__cursor.execute(sql, val)
+			self.__conn.commit()
+			return self.__cursor.lastrowid
+		except:
+			print("Database not alive")
+			return None
 
 	def sql_select_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
 		assert isinstance(criterium, str)
-		self.__conn.reconnect()
 		sql = "SELECT * FROM {} WHERE {} = %s".format(table, criterium) + " ORDER BY id"
 		val = (value,)
-		self.__cursor.execute(sql, val)
-		result = self.__cursor.fetchall()
-		return result
-
+		try:
+			self.__conn.reconnect()
+			self.__cursor.execute(sql, val)
+			result = self.__cursor.fetchall()
+			return result
+		except:
+			print("Database not alive")	
+			return None
+		
 	def sql_select_everything_from_table(self, table):
 		assert isinstance(table, str)
-		self.__conn.reconnect()
 		sql = "SELECT * FROM {}".format(table) + " ORDER BY id"
-		self.__cursor.execute(sql)
-		result = self.__cursor.fetchall()
-		return result
+		try:
+			self.__conn.reconnect()
+			self.__cursor.execute(sql)
+			result = self.__cursor.fetchall()
+			return result
+		except:
+			print("Database not alive")	
+			return None
 
 	def sql_delete_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
@@ -226,24 +215,38 @@ class Comm:
 		assert isinstance(value, int)
 		sql = "DELETE FROM {} WHERE {} = %s".format(table, criterium)
 		val = (value,)
-		self.__cursor.execute(sql, val)
-		self.__conn.commit()
+		try:
+			self.__cursor.execute(sql, val)
+			self.__conn.commit()
+			return True
+		except:
+			print("Database not alive")	
+			return False
 
 	def sql_delete_everything_from_table(self, table):
 		assert isinstance(table, str)
 		assert isinstance(table, str)
 		sql = "DELETE FROM {}".format(table)
-		self.__cursor.execute(sql)
-		self.__conn.commit()
+		try:
+			self.__cursor.execute(sql)
+			self.__conn.commit()
+			return True
+		except:
+			print("Database not alive")	
+			return False
 
 	def sql_get_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
-		self.__conn.reconnect()
 		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'assigned' ORDER BY priority"
 		val = (robot_id,)
-		self.__cursor.execute(sql, val)
-		result = self.__cursor.fetchall()
-		return result
+		try:
+			self.__conn.reconnect()
+			self.__cursor.execute(sql, val)
+			result = self.__cursor.fetchall()
+			return result
+		except:
+			print("Database not alive")	
+			return None
 
 	def sql_delete_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
@@ -253,8 +256,10 @@ class Comm:
 			self.__conn.reconnect()
 			self.__cursor.execute(sql, val)
 			self.__conn.commit()
+			return True
 		except:
-			print("Database not alive1")
+			print("Database not alive")
+			return False
 
 	def sql_update_robot(self, id, robot): 
 		assert isinstance(id, int)
@@ -282,9 +287,10 @@ class Comm:
 		try:
 			self.__cursor.execute(sql, val)
 			self.__conn.commit()
+			return True
 		except:
-			print("Database not alive3")	
-			pass
+			print("Database not alive")	
+			return False
 
 	def sql_update_task(self, id, task):
 		assert isinstance(id, int)
@@ -303,8 +309,10 @@ class Comm:
 		try:
 			self.__cursor.execute(sql, val)
 			self.__conn.commit()
+			return True
 		except:
-			print("Database not alive4")	
+			print("Database not alive")	
+			return False
 
 	def sql_update_tasks(self, tasks):
 		assert isinstance(tasks, list)
@@ -322,19 +330,24 @@ class Comm:
 		try:
 			self.__cursor.executemany(sql, val)
 			self.__conn.commit()
+			return True
 		except:
-			print("Database not alive5")	
+			print("Database not alive")	
+			return False
 
 	def print_database(self):
-		sql = "SELECT * FROM global_task_list"
-		self.__cursor.execute(sql)
-		print('Task list')
-		for row in self.__cursor:
-			print('\t' + str(row))
-		sql = "SELECT id, node, status, path FROM global_robot_list"
-		self.__cursor.execute(sql)
-		print('Robot list')
-		for row in self.__cursor:
-			print('\t' + str(row))
-		print()
+		try:
+			sql = "SELECT * FROM global_task_list"
+			self.__cursor.execute(sql)
+			print('Task list')
+			for row in self.__cursor:
+				print('\t' + str(row))
+			sql = "SELECT id, node, status, path FROM global_robot_list"
+			self.__cursor.execute(sql)
+			print('Robot list')
+			for row in self.__cursor:
+				print('\t' + str(row))
+			print()
+		except:
+			print("Database not alive")
 
