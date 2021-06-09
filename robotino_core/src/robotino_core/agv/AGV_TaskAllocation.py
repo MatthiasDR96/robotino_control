@@ -1,6 +1,6 @@
-from solvers.tsp_solver import tsp
+from robotino_core.solvers.tsp_solver import tsp
 import pickle
-from Comm import Comm
+from robotino_core.Comm import Comm
 
 class TaskAllocation:
 	"""
@@ -16,7 +16,7 @@ class TaskAllocation:
 	def main(self):
 
 		# Open database connection
-		print("\nTask allocator:        Started")
+		print("Task allocator:     Started")
 		self.comm = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
 		self.comm.tcp_server_open()
 		self.comm.sql_open()
@@ -60,7 +60,7 @@ class TaskAllocation:
 
 			# Add assigned tasks optimally to local task list
 			self.update_local_task_list(task)
-			conn.sendall(b'Task accepted')
+			conn.sendall(pickle.dumps('task_accepted'))
 			print("Agv " + str(self.agv.id) + ":      Added task " + str(task['id']) + " to local task list")
 
 		# Close connection

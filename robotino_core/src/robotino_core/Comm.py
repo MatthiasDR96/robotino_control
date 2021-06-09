@@ -245,7 +245,8 @@ class Comm:
 			result = self.__cursor.fetchall()
 			return result
 		except:
-			print("Database not alive")	
+			print("Database not alive 1")	
+			self.sql_open()
 			return None
 
 	def sql_delete_local_task_list(self, robot_id):
@@ -268,6 +269,8 @@ class Comm:
 					global_robot_list
 				SET
 					id = %s,
+					ip = %s,
+					port = %s,
 					x_loc = %s,
 					y_loc = %s,
 					theta = %s,

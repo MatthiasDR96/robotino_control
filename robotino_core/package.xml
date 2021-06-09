@@ -3,7 +3,7 @@
 
   <name>robotino_core</name>
   <version>1.0.0</version>
-  <description>This package provides the Robotino core intelligence</description>
+  <description>Control software for the Robotino AGVs at the Ultimate Factory in the KU Leuven Campus in Bruges</description>
 
   <license>BSD</license>
   <author email="matthias.deryck@kuleuven.be">Matthias De Ryck</author>

@@ -1,15 +1,17 @@
 import math
-import yaml
 import threading
+import time
 import signal
+import yaml
+import os
 
-from Comm import Comm
-from Graph import Graph
-from agv.AGV_Action import Action
-from agv.AGV_Routing import Routing
-from agv.AGV_TaskAllocation import TaskAllocation
-from agv.AGV_ResourceManagement import ResourceManagement
-from solvers.astar_solver import find_shortest_path
+from robotino_core.Comm import Comm
+from robotino_core.Graph import Graph
+from robotino_core.agv.AGV_Action import Action
+from robotino_core.agv.AGV_Routing import Routing
+from robotino_core.agv.AGV_TaskAllocation import TaskAllocation
+from robotino_core.agv.AGV_ResourceManagement import ResourceManagement
+from robotino_core.solvers.astar_solver import find_shortest_path
 
 class AGV:
 	"""
@@ -27,7 +29,9 @@ class AGV:
 		self.database = database
 
 		# Read params
-		with open(r'robotino_core/src/robotino_core/params/setup.yaml') as file:
+		this_dir = os.path.dirname(os.path.dirname(__file__))
+		data_path = os.path.join(this_dir, "params", "setup.yaml")
+		with open(data_path, 'r') as file:
 			self.params = yaml.load(file, Loader=yaml.FullLoader)
 
 		# Create graph
@@ -101,7 +105,7 @@ class AGV:
 	def main(self):
 
 		# Open database connection
-		print("\nAGV " + str(self.id) + ":        Started")
+		print("\nAGV " + str(self.id) + ":             Started")
 		comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
 		comm.sql_open()
 
@@ -109,9 +113,10 @@ class AGV:
 
 			# Wait for a task on the local task list
 			items = comm.sql_get_local_task_list(self.id)
-			for row in items:
-				self.task_executing = row
-				break 
+			if items:
+				for row in items:
+					self.task_executing = row
+					break 
 
 			# Execute task
 			if not self.task_executing['id'] == -1:
@@ -172,20 +177,23 @@ class AGV:
 			self.update_global_robot_list(comm)
 
 			# Close thread at close event 
-			#if self.exit_event.is_set():
-				#break
+			if self.exit_event.is_set():
+				break
 
 	def update_global_robot_list(self, comm):
-		robot_dict = {"id": self.id, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
+		robot_dict = {"id": self.id, "ip": self.ip, "port": self.port, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
 				"status": self.status, "battery_status": self.battery_status, "travelled_time": self.travelled_time, "charged_time": self.charged_time,
 				"congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.path), "total_path": str(self.total_path)}
+		comm.sql_add_to_table('global_robot_list', robot_dict)
 		comm.sql_update_robot(self.id, robot_dict)
 
 	def signal_handler(self, _, __):
 
-		# Closing threads
+		# Close threads
 		print("\nShutdown robot")
-
+		self.exit_event.set()
+		time.sleep(1)
+		
 		# Open database connection
 		comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
 		comm.sql_open()
@@ -206,6 +214,5 @@ class AGV:
 		# Close connection
 		comm.sql_close()
 
-		# Close threads
-		#self.exit_event.set()
+		
 		exit(0)

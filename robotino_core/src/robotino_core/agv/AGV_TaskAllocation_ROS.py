@@ -1,6 +1,6 @@
-from solvers.tsp_solver import tsp
+from robotino_core.solvers.tsp_solver import tsp
 import pickle
-from Comm import Comm
+from robotino_core.Comm import Comm
 import rospy
 
 class TaskAllocation:

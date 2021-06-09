@@ -1,7 +1,7 @@
 from pyswarm import pso
 
-from solvers.genetic_algorithm_solver import *
-from solvers.tsp_solver import *
+from robotino_core.solvers.genetic_algorithm_solver import *
+from robotino_core.solvers.tsp_solver import *
 
 
 class ResourceManagement:
