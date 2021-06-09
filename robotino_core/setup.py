@@ -16,7 +16,7 @@ setup_args = generate_distutils_setup(
     packages=['robotino_core', 'robotino_core.agv', 'robotino_core.solvers'],
     package_data={'robotino_core': ['params/*.yaml']},
     package_dir={'': 'src'},
-    scripts=['bin/main.py'],
+    scripts=['scripts/main.py'],
     install_requires=['numpy', 'pandas', 'mysql-connector-python', 'matplotlib']
 )
 
