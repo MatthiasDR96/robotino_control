@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import math
 import threading
 import time
@@ -41,22 +42,11 @@ class AGV:
 		self.graph.create_nodes(self.node_locations, list(self.node_names.keys()))
 		self.graph.create_edges(list(self.node_names.keys()), list(self.node_names.values()))
 
-		# Agv attributes
-		self.id = id
-		self.speed = self.params['robot_speed']
-		self.task_execution_time = self.params['task_execution_time']
-		self.battery_threshold = self.params['battery_threshold']
-		self.collision_threshold = self.params['collision_threshold']
-		self.max_charging_time = self.params['max_charging_time']
-		self.max_tasks_in_task_list = self.params['max_tasks_in_task_list']
-		self.initial_resources = self.params['initial_resources']
-		self.depot_locations = self.params['depot_locations']  
-
 		# Control types
 		self.charging_approach = False
-		self.routing_approach = False
 
 		# Updated attributes
+		self.id = id
 		self.x_loc = loc[0]
 		self.y_loc = loc[1]
 		self.theta = 0.0
@@ -69,19 +59,16 @@ class AGV:
 		self.task_executing = {'id': -1, 'node': None}
 		self.path = []
 		self.total_path = []
-		
-		# Add robot to database
-		comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
-		comm.sql_open()
-		robot_dict = {"id": self.id, "ip": self.ip, "port": self.port, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
-				"status": self.status, "battery_status": self.battery_status, "travelled_time": self.travelled_time, "charged_time": self.charged_time,
-				"congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.path), "total_path": str(self.total_path)}
-		comm.sql_add_to_table('global_robot_list', robot_dict)
-		comm.sql_close()
 
+		# Dmas attributes
+		self.slots = []
+		self.reserved_paths = {}
+		self.reserved_slots = {}
+
+		# Task agents
 		self.task_allocation = TaskAllocation(self)
-		#self.routing = Routing(self)
-		#self.resource_management = ResourceManagement(self)
+		self.routing = Routing(self)
+		# self.resource_management = ResourceManagement(self)
 		self.action = Action(self)
 
 		# Exit procedure
@@ -98,14 +85,18 @@ class AGV:
 		z = threading.Thread(target=self.task_allocation.main)
 		z.daemon = True
 		z.start()
+		q = threading.Thread(target=self.routing.main)
+		q.daemon = True
+		q.start()
 		x.join()
 		y.join()
 		z.join()
+		q.join()
 
 	def main(self):
 
 		# Open database connection
-		print("\nAGV " + str(self.id) + ":             Started")
+		print("\nAGV " + str(self.id) + ":                       Started")
 		comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
 		comm.sql_open()
 
@@ -120,7 +111,7 @@ class AGV:
 
 			# Execute task
 			if not self.task_executing['id'] == -1:
-
+				
 				# Start task
 				print("Agv " + str(self.id) + ":        Start executing task " + str(self.task_executing['id']))
 				if self.status != 'EMPTY': self.status = 'BUSY'
@@ -150,11 +141,27 @@ class AGV:
 
 	def execute_task(self, task):
 
-		# Compute dmas path towards task destination
-		self.path, _ = find_shortest_path(self.graph, self.node, task['node'])
+		# Compute path towards task destination
+		if self.params['routing'] == True:
+			if task['id'] in self.reserved_paths.keys():
+				self.path = self.reserved_paths[task['id']]
+				self.slots = self.reserved_slots[task['id']]
+			else:
+				self.path, self.slots, _ = self.routing.dmas(self.node, [task['node']], datetime.now())
+		else:
+			self.path, _ = find_shortest_path(self.graph, self.node, task['node'])
 
 		# Move from node to node
 		while len(self.path) > 0:
+
+			# Wait for node to be free
+			# if self.params['routing'] == True:
+				# node_arriving_time = self.slots[0][0]
+				# if node_arriving_time > datetime.now():
+					# td = node_arriving_time - datetime.now()
+					# time.sleep(td.total_seconds())
+
+			# Move to node if free
 			self.action.move_to_node(self.path[0])
 
 	def search_closest_node(self, loc):
@@ -204,15 +211,10 @@ class AGV:
 		# Make all tasks unassigned
 		tasks = []
 		local_task_list = comm.sql_get_local_task_list(self.id)
-		for task in local_task_list:
-			tasks.append((-1, 'unassigned', '', 0, task['id']))
-		if not self.task_executing['id'] == -1:
-			tasks.append((-1, 'unassigned', '', 0, self.task_executing['id']))
-		if not len(tasks) == 0:
-			comm.sql_update_tasks(tasks)
+		for task in local_task_list: tasks.append((-1, 'unassigned', '', 0, task['id']))
+		if not self.task_executing['id'] == -1: tasks.append((-1, 'unassigned', '', 0, self.task_executing['id']))
+		if not len(tasks) == 0: comm.sql_update_tasks(tasks)
 
 		# Close connection
 		comm.sql_close()
-
-		
 		exit(0)

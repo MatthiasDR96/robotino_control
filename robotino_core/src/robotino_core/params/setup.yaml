@@ -7,6 +7,9 @@ max_tasks_in_task_list: 5
 epsilon: 0.5
 initial_resources: 100
 
+routing: True
+dmas_update_rate: 5
+
 max_arrival_interval: 20
 priorities: [1, 2, 3]
 
