@@ -245,7 +245,7 @@ class Comm:
 			result = self.__cursor.fetchall()
 			return result
 		except:
-			print("Database not alive 1")	
+			print("Database not alive")	
 			self.sql_open()
 			return None
 

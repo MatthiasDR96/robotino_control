@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import math
 import threading
 import time
@@ -42,9 +42,6 @@ class AGV:
 		self.graph.create_nodes(self.node_locations, list(self.node_names.keys()))
 		self.graph.create_edges(list(self.node_names.keys()), list(self.node_names.values()))
 
-		# Control types
-		self.charging_approach = False
-
 		# Updated attributes
 		self.id = id
 		self.x_loc = loc[0]
@@ -52,7 +49,7 @@ class AGV:
 		self.theta = 0.0
 		self.node = self.search_closest_node(loc)
 		self.status = 'IDLE'
-		self.battery_status = 100.0
+		self.battery_status = 40.0
 		self.travelled_time = 0.0
 		self.charged_time = 0.0
 		self.congestions = 0
@@ -65,10 +62,13 @@ class AGV:
 		self.reserved_paths = {}
 		self.reserved_slots = {}
 
+		# Depot station
+		self.depot = self.search_closest_node(loc)
+
 		# Task agents
 		self.task_allocation = TaskAllocation(self)
 		self.routing = Routing(self)
-		# self.resource_management = ResourceManagement(self)
+		self.resource_management = ResourceManagement(self)
 		self.action = Action(self)
 
 		# Exit procedure
@@ -88,10 +88,18 @@ class AGV:
 		q = threading.Thread(target=self.routing.main)
 		q.daemon = True
 		q.start()
+		r = threading.Thread(target=self.routing.homing)
+		r.daemon = True
+		r.start()
+		s = threading.Thread(target=self.resource_management.main)
+		s.daemon = True
+		s.start()
 		x.join()
 		y.join()
 		z.join()
 		q.join()
+		r.join()
+		s.join()
 
 	def main(self):
 
@@ -100,14 +108,13 @@ class AGV:
 		comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
 		comm.sql_open()
 
+		# Loop
 		while True:
 
 			# Wait for a task on the local task list
 			items = comm.sql_get_local_task_list(self.id)
-			if items:
-				for row in items:
-					self.task_executing = row
-					break 
+			if items: 
+				for row in items: self.task_executing = row; break 
 
 			# Execute task
 			if not self.task_executing['id'] == -1:
@@ -136,12 +143,13 @@ class AGV:
 				if self.status != 'EMPTY': self.status = 'IDLE'
 
 			# Close thread at close event 
-			#if self.exit_event.is_set():
-				#break
+			if self.exit_event.is_set():
+				break
 
 	def execute_task(self, task):
 
 		# Compute path towards task destination
+		print("Move to " + str(task['node']))
 		if self.params['routing'] == True:
 			if task['id'] in self.reserved_paths.keys():
 				self.path = self.reserved_paths[task['id']]
@@ -153,7 +161,6 @@ class AGV:
 
 		# Move from node to node
 		while len(self.path) > 0:
-
 			# Wait for node to be free
 			# if self.params['routing'] == True:
 				# node_arriving_time = self.slots[0][0]
@@ -163,6 +170,20 @@ class AGV:
 
 			# Move to node if free
 			self.action.move_to_node(self.path[0])
+
+		# Check if task is charging task
+		if task['message'] == 'charging':
+
+			# Update status
+			print("AGV " + str(self.id) + ":      Is charging for " + str(5) + " seconds")
+			self.status = 'CHARGING'
+
+			# Charging
+			time.sleep(5)
+
+			# Update robot status
+			self.battery_status = 100
+			self.status = 'IDLE'
 
 	def search_closest_node(self, loc):
 		node = min(self.graph.nodes.values(), key=lambda node: self.calculate_euclidean_distance(node.pos, loc))

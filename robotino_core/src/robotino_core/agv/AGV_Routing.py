@@ -23,6 +23,7 @@ class Routing:
 		comm = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
 		comm.sql_open()
 		
+		# Loop
 		while True:
 
 			# Timeout
@@ -35,7 +36,7 @@ class Routing:
 			start_node = self.agv.task_executing['node'] if not self.agv.task_executing['id'] == -1 else self.agv.node
 
 			# Get start time of robot
-			start_time = datetime.now() if self.agv.task_executing['id'] == -1 else self.agv.slots[-1][0] + self.agv.slots[-1][1]
+			start_time = datetime.now() #if self.agv.task_executing['id'] == -1 and len(self.agv.slots) == 0 else self.agv.slots[-1][0] + self.agv.slots[-1][1]
 
 			# Update paths for each task in local task list
 			total_path = []
@@ -63,17 +64,18 @@ class Routing:
 					self.intent(self.agv.id, best_path, best_slots)
 
 			# Update total path
-			self.agv.total_path = self.agv.path + total_path
+			self.agv.total_path = total_path
 
 			# Close thread at close event 
-			#if self.agv.exit_event.is_set():
-				#break
+			if self.agv.exit_event.is_set():
+				break
 
 	def dmas(self, start_node, nodes_to_visit, start_time):
 
 		# Feasibility ants
 		_, local_feasible_paths = self.think(start_node, nodes_to_visit)
 
+		# If feasible paths exist
 		if local_feasible_paths:
 
 			# Exploration ants
@@ -149,24 +151,22 @@ class Routing:
 
 	def homing(self):
 
+		# Open database connection
+		comm = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
+		comm.sql_open()
+
+		# Loop
 		while True:
 
-			# Timeout
-			yield self.agv.env.timeout(2)  # Sample time
-
 			# Get tasks in local task list
-			local_task_list = [task for task in self.agv.kb['local_task_list_R' + str(self.agv.ID)].items]
+			local_task_list = comm.sql_get_local_task_list(self.agv.id)
 
-			# Add homing task if all work is done
-			if len(
-					local_task_list) == 0 and not self.agv.task_executing and not self.agv.robot_node == self.agv.home_task.pos_A:
+			# If database alive
+			if not local_task_list is None:
 
-				# Get path and slots
-				if self.agv.routing_approach == 'dmas':
-					self.agv.reserved_paths[self.agv.home_task.order_number], \
-					self.agv.reserved_slots[self.agv.home_task.order_number], _ = \
-						self.agv.routing.dmas(self.agv.robot_node, [self.agv.home_task.pos_A], self.agv.env.now)
+				# Add homing task if all work is done
+				if len(local_task_list) == 0 and self.agv.task_executing['id'] == -1 and not self.agv.node == self.agv.depot:
 
-				# Add task to task list
-				self.agv.comm.sql_write(self.agv.kb['local_task_list_R' + str(self.agv.ID)],
-										self.agv.home_task)
+					# Add task to task list
+					task_dict = {"node": self.agv.depot, "priority": 1, "robot": self.agv.id, "message": 'homing', "status": 'assigned'}
+					comm.sql_add_to_table('global_task_list', task_dict)

@@ -37,8 +37,8 @@ class TaskAllocation:
 			self.handle_client(conn, addr)
 
 			# Close thread at close event 
-			#if self.agv.exit_event.is_set():
-				#break
+			if self.agv.exit_event.is_set():
+				break
 
 	def handle_client(self, conn, _):
 
