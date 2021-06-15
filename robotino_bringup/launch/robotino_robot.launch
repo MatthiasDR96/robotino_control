@@ -12,7 +12,7 @@
   <!-- Robotino visualization -->
   <include file="$(find robotino_bringup)/launch/robotino_visualization.launch"/>
 
-  <!-- Robotino core -->
-  <include file="$(find robotino_core)/launch/robotino_core.launch"/>
+  <!-- Robotino core
+  <include file="$(find robotino_core)/launch/robotino_core.launch"/> -->
 
 </launch>

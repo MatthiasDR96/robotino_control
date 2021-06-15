@@ -1,6 +1,7 @@
 import rospy
 import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from tf.transformations import quaternion_from_euler
 
 
 class Action:
@@ -21,6 +22,9 @@ class Action:
         print("AGV " + str(self.agv.id) + ":        Move to node " + node)
         loc = self.agv.graph.nodes[node].pos
 
+        # Get theta
+        rotation = quaternion_from_euler(0, 0, loc[2])
+
         # Connect to server
         wait = self.client.wait_for_server(rospy.Duration(5.0))
         if not wait:
@@ -32,12 +36,12 @@ class Action:
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "map"
         goal.target_pose.header.stamp = rospy.Time.now()
-        goal.target_pose.pose.position.x = 1.0
-        goal.target_pose.pose.position.y = -3.0
-        goal.target_pose.pose.orientation.x = 1.0
-        goal.target_pose.pose.orientation.y = 0.0
-        goal.target_pose.pose.orientation.z = 0.0
-        goal.target_pose.pose.orientation.w = 0.0
+        goal.target_pose.pose.position.x = loc[0]
+        goal.target_pose.pose.position.y = loc[1]
+        goal.target_pose.pose.orientation.x = rotation[0]
+        goal.target_pose.pose.orientation.y = rotation[1]
+        goal.target_pose.pose.orientation.z = rotation[2]
+        goal.target_pose.pose.orientation.w = rotation[3]
 
         # Send goal
         self.client.send_goal(goal)
