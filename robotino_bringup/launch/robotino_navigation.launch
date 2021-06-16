@@ -1,12 +1,5 @@
 <launch>
 
-  <!-- Arguments -->
-  <arg name="robot_env" default="$(optenv ROBOT_ENV map_level1)"/>
-  <arg name="map_file" default="$(find robotino_navigation)/maps/$(arg robot_env).yaml"/>
-
-  <!-- Map server -->
-  <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)"/>
-
   <!-- AMCL -->
   <include file="$(find robotino_navigation)/launch/robotino_amcl.launch"/>
 

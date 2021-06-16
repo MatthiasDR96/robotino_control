@@ -1,11 +1,15 @@
 <launch>
 
   <!-- Arguments -->
+  <arg name="map_file" default="$(find robotino_navigation)/maps/map.yaml"/>
   <arg name="scan_topic"     default="scan"/>
   <arg name="initial_pose_x" default="0.0"/>
   <arg name="initial_pose_y" default="0.0"/>
   <arg name="initial_pose_a" default="0.0"/>
 
+  <!-- Map server -->
+  <node pkg="map_server" name="map_server" type="map_server" args="$(arg map_file)"/>
+  
   <!-- AMCL node -->
   <node pkg="amcl" type="amcl" name="amcl">
     <rosparam file="$(find robotino_navigation)/param/amcl_params.yaml" command="load" ns="amcl" />

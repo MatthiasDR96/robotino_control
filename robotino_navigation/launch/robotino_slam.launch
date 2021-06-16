@@ -5,6 +5,7 @@
   <arg name="set_odom_frame" default="odom"/>
   <arg name="set_map_frame"  default="map"/>
   <arg name="open_rviz" default="true"/>
+  <arg name="use_sim_time" default="true"/>
 
   <!-- Gmapping node -->
   <node pkg="gmapping" type="slam_gmapping" name="robotino_slam_gmapping" output="screen">
