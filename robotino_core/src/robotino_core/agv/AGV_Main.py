@@ -37,10 +37,10 @@ class AGV:
 
 		# Create graph
 		self.graph = Graph()
-		self.node_names = self.params['node_names']
-		self.node_locations = self.params['node_locations']
-		self.graph.create_nodes(self.node_locations, list(self.node_names.keys()))
-		self.graph.create_edges(list(self.node_names.keys()), list(self.node_names.values()))
+		node_neighbors = self.params['node_neighbors']
+		node_locations = self.params['node_locations']
+		self.graph.create_nodes(list(node_locations.values()), list(node_locations.keys()))
+		self.graph.create_edges(list(node_neighbors.keys()), list(node_neighbors.values()))
 
 		# Updated attributes
 		self.id = id

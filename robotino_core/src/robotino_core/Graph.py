@@ -79,7 +79,7 @@ class Graph:
 
         for node in self.__nodes.values():
             ax.plot(node.pos[0], node.pos[1], 'b.', ms=6)
-            ax.text(node.pos[0] + 1.5, node.pos[1] + 1.5, node.name)
+            ax.text(node.pos[0] + 0.1, node.pos[1] + 0.1, node.name)
         for edge in self.__edges.values():
             arrow_x = (edge.start_node.pos[0] + edge.end_node.pos[0]) / 2
             arrow_y = (edge.start_node.pos[1] + edge.end_node.pos[1]) / 2
@@ -87,7 +87,7 @@ class Graph:
             delta_y = (edge.end_node.pos[1] - edge.start_node.pos[1]) * 0.01
             ax.plot([edge.start_node.pos[0], edge.end_node.pos[0]], [edge.start_node.pos[1], edge.end_node.pos[1]],
                     'b-', lw=0.5)
-            ax.arrow(arrow_x, arrow_y, delta_x, delta_y, length_includes_head=True, head_width=2, head_length=2)
+            ax.arrow(arrow_x, arrow_y, delta_x, delta_y, length_includes_head=True, head_width=0.2, head_length=0.2)
 
         # To annotate nodes or paths
         color = matplotlib.cm.rainbow(np.linspace(0, 1, len(paths)))

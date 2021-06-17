@@ -16,7 +16,7 @@
     <rosparam file="$(find robotino_navigation)/param/local_costmap_params.yaml" command="load" />
     <rosparam file="$(find robotino_navigation)/param/global_costmap_params.yaml" command="load" />
     <rosparam file="$(find robotino_navigation)/param/move_base_params.yaml" command="load" />
-    <rosparam file="$(find robotino_navigation)/param/base_local_planner_params.yaml" command="load" />
+    <rosparam file="$(find robotino_navigation)/param/dwa_local_planner_params.yaml" command="load" />
     <rosparam file="$(find robotino_navigation)/param/global_planner_params.yaml" command="load"/>
     <!--<rosparam file="$(find robotino_navigation)/param/navfn_global_planner_params.yaml" command="load"/>-->
     

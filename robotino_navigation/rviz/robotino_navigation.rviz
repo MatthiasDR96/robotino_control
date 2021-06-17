@@ -8,6 +8,7 @@ Panels:
         - /Global Map1/Planner1
         - /Local Map1/Costmap1
         - /Local Map1/Planner1
+        - /Pose1
         - /TF1/Frames1
       Splitter Ratio: 0.5
     Tree Height: 577
@@ -231,22 +232,6 @@ Visualization Manager:
           Value: true
       Enabled: true
       Name: Local Map
-    - Alpha: 1
-      Axes Length: 1
-      Axes Radius: 0.10000000149011612
-      Class: rviz/Pose
-      Color: 255; 25; 0
-      Enabled: true
-      Head Length: 0.30000001192092896
-      Head Radius: 0.10000000149011612
-      Name: Goal
-      Queue Size: 10
-      Shaft Length: 0.5
-      Shaft Radius: 0.05000000074505806
-      Shape: Arrow
-      Topic: /move_base_simple/goal
-      Unreliable: false
-      Value: true
     - Class: rviz/Image
       Enabled: true
       Image Topic: /usb_cam/image_raw

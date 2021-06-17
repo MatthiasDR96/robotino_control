@@ -5,8 +5,13 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 from tf.transformations import euler_from_quaternion
 
 node_locations = {'node_locations': []}
+global counter
+counter = 1
 
 def amcl_callback(msg):
+
+	# Global variable
+	global counter
 
 	# Get position
 	x_loc = msg.pose.pose.position.x
@@ -19,8 +24,12 @@ def amcl_callback(msg):
 	theta = yaw
 	print("Received pose: x=" + str(x_loc) + ' y=' + str(y_loc) + ' theta=' + str(theta))
 
-	node_locations['node_locations'].append(tuple([x_loc, y_loc, theta]))
+	# Node name
+	node_name = 'pos_' + str(counter)
+	counter += 1
 
+	# Save node
+	node_locations['node_locations'].append({node_name: tuple([x_loc, y_loc, theta])})
 	print(node_locations)
 
 def shutdown():

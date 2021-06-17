@@ -41,6 +41,7 @@ class Comm:
 		self.sock_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # Make address reusable
 		self.sock_server.bind((self.ip, self.port))
 		self.sock_server.listen()
+		self.sock_server.settimeout(None)
 
 	def tcp_server_close(self):
 		self.sock_server.close()
