@@ -21,7 +21,7 @@ graph.plot()
 plt.show()
 
 # reading png image file
-im = plt.imread('src/robotino_core/params/map.pgm')
+im = plt.imread(os.path.join(this_dir, "src/robotino_core/params", "map.pgm"))
   
 # show image
 fig, ax = plt.subplots()
