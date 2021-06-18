@@ -4,13 +4,16 @@ import time
 class Action:
 
     def __init__(self, agv):
+
         self.agv = agv
 
     def move_to_node(self, node):
         
         print("AGV " + str(self.agv.id) + ":        Move to node " + node)
         node_position = self.agv.graph.nodes[node].pos
-        time.sleep(5)
+        distance = self.agv.calculate_euclidean_distance((self.agv.x_loc, self.agv.y_loc), node_position)
+        self.agv.dist_done += distance
+        time.sleep(distance/self.agv.params['robot_speed'])
         self.agv.battery_status = self.agv.battery_status - 10
         self.agv.node = node
         self.agv.x_loc = node_position[0]

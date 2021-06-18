@@ -1,4 +1,4 @@
-robot_speed: 1
+robot_speed: 10
 task_execution_time: 0
 collision_threshold: 0.5
 battery_threshold: 20

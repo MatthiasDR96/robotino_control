@@ -154,6 +154,13 @@ class Comm:
 				node VARCHAR(100),
 				priority INT,
 				robot INT,
+				estimated_start_time FLOAT,
+				estimated_end_time FLOAT,
+				estimated_duration FLOAT,
+				real_start_time VARCHAR(100),
+				real_end_time VARCHAR(100),
+				real_duration VARCHAR(100),
+				progress FOAT,
 				message VARCHAR(100),
 				status VARCHAR(100)
 		)
@@ -283,7 +290,8 @@ class Comm:
 					congestions = %s,
 					task_executing = %s,
 					path = %s,
-					total_path = %s
+					total_path = %s,
+					time_now = %s
 				WHERE
 					id = {}
 				""".format(id)
@@ -301,11 +309,12 @@ class Comm:
 		assert isinstance(task, dict)
 		sql = """UPDATE 
 					global_task_list 
-				SET 
-					robot = %s, 
-					status = %s, 
-					message = %s, 
-					priority = %s 
+				SET
+			"""
+		for key in task.keys():
+			sql += key + '= %s,'
+		sql = sql[:-1]
+		sql += """
 				WHERE 
 					id = {}
 				""".format(id)
@@ -326,7 +335,14 @@ class Comm:
 					robot = %s, 
 					status = %s, 
 					message = %s, 
-					priority = %s 
+					priority = %s,
+					estimated_start_time = %s,
+					estimated_end_time = %s,
+					estimated_duration = %s,
+					real_start_time = %s,
+					real_end_time = %s,
+					real_duration = %s,
+					progress = %s
 				WHERE 
 					id = %s
 				"""

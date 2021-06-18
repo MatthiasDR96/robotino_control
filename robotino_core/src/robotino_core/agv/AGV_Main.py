@@ -49,12 +49,14 @@ class AGV:
 		self.theta = 0.0
 		self.node = self.search_closest_node(loc)
 		self.status = 'IDLE'
-		self.battery_status = 40.0
+		self.battery_status = 100.0
 		self.travelled_time = 0.0
 		self.charged_time = 0.0
 		self.congestions = 0
-		self.task_executing = {'id': -1, 'node': None}
-		self.path = []
+		self.task_executing = {'id': -1, 'node': None, 'message': '-'}
+		self.path = [] # Current executing path
+		self.dist_to_do = 0.0 # Current distance to execute
+		self.dist_done = 0.0 # Current distance already executed
 		self.total_path = []
 
 		# Dmas attributes
@@ -73,33 +75,37 @@ class AGV:
 
 		# Exit procedure
 		self.exit_event = threading.Event()
-		signal.signal(signal.SIGINT, self.signal_handler)
+		signal.signal(signal.SIGINT, self.signal_handler2)
 
 		# Processes
-		x = threading.Thread(target=self.odom_callback)
+		x = threading.Thread(target=self.main)
 		x.daemon = True
 		x.start()
-		y = threading.Thread(target=self.main)
+		y = threading.Thread(target=self.odom_callback)
 		y.daemon = True
 		y.start()
-		z = threading.Thread(target=self.task_allocation.main)
-		z.daemon = True
-		z.start()
-		q = threading.Thread(target=self.routing.main)
+		q = threading.Thread(target=self.task_allocation.main)
 		q.daemon = True
 		q.start()
-		r = threading.Thread(target=self.routing.homing)
+		r = threading.Thread(target=self.task_allocation.progress_tracker)
 		r.daemon = True
 		r.start()
-		s = threading.Thread(target=self.resource_management.main)
+		s = threading.Thread(target=self.routing.main)
 		s.daemon = True
 		s.start()
+		t = threading.Thread(target=self.routing.homing)
+		t.daemon = True
+		t.start()
+		u = threading.Thread(target=self.resource_management.main)
+		u.daemon = True
+		u.start()
 		x.join()
 		y.join()
-		z.join()
 		q.join()
 		r.join()
 		s.join()
+		t.join()
+		u.join()
 
 	def main(self):
 
@@ -120,24 +126,37 @@ class AGV:
 			if not self.task_executing['id'] == -1:
 				
 				# Start task
-				print("Agv " + str(self.id) + ":        Start executing task " + str(self.task_executing['id']))
+				print("\nAgv " + str(self.id) + ":        Start executing task " + str(self.task_executing['id']))
 				if self.status != 'EMPTY': self.status = 'BUSY'
 
 				# Remove from local task list and add task to executing list
-				task_dict = {'robot': self.id, 'status': 'executing', 'message': self.task_executing['message'], 'priority': self.task_executing['priority']}
+				start_time = datetime.now()
+				task_dict = {'robot': self.id, 'status': 'executing', 'message': self.task_executing['message'], 'priority': self.task_executing['priority'], 'real_start_time': start_time.strftime('%H:%M:%S')}
 				comm.sql_update_task(self.task_executing['id'], task_dict)
 
 				# Go to task
-				self.execute_task(self.task_executing)
+				result = self.execute_task(self.task_executing)
 
-				# Perform task
-				self.action.pick()
-				print("Agv " + str(self.id) + ":        Picked item of task " + str(self.task_executing['id']))
+				# If task reached
+				if result:
 
-				# Task executed
-				task_dict = {'robot': self.id, 'status': 'done', 'message': self.task_executing['message'], 'priority': self.task_executing['priority']}
-				comm.sql_update_task(self.task_executing['id'], task_dict)
-				self.task_executing = {'id': -1, 'node': None}
+					# Perform task
+					self.action.pick()
+					print("Agv " + str(self.id) + ":        Picked item of task " + str(self.task_executing['id']))
+
+					# Task executed
+					end_time = datetime.now()
+					duration = end_time - start_time
+					task_dict = {'robot': self.id, 'status': 'done', 'message': self.task_executing['message'], 'priority': self.task_executing['priority'], 'real_end_time': end_time.strftime('%H:%M:%S'), 'real_duration': str(duration)}
+					comm.sql_update_task(self.task_executing['id'], task_dict)
+					self.task_executing = {'id': -1, 'node': None}
+
+				else:
+
+					# Make task unnasigned
+					task_dict = {'id': -1, 'status': 'unassigned', 'message': '-', 'priority': 0}
+					comm.sql_update_task(self.task_executing['id'], task_dict)
+					self.task_executing = {'id': -1, 'node': None}
 
 				# Set status to IDLE when task is done or when done charging
 				if self.status != 'EMPTY': self.status = 'IDLE'
@@ -149,17 +168,25 @@ class AGV:
 	def execute_task(self, task):
 
 		# Compute path towards task destination
-		print("Move to " + str(task['node']))
-		if self.params['routing'] == True:
+		if self.params['routing']:
 			if task['id'] in self.reserved_paths.keys():
-				self.path = self.reserved_paths[task['id']]
-				self.slots = self.reserved_slots[task['id']]
+				path = self.reserved_paths[task['id']]
+				slots = self.reserved_slots[task['id']]
 			else:
-				self.path, self.slots, _ = self.routing.dmas(self.node, [task['node']], datetime.now())
+				path, slots = self.routing.dmas(self.node, [task['node']], datetime.now())
 		else:
-			self.path, _ = find_shortest_path(self.graph, self.node, task['node'])
+			path, dist = find_shortest_path(self.graph, self.node, task['node'])
+			slots = []
+
+		# Compute total distance to travel
+		dist = self.graph.edges[self.node, path[0]].length if path else 0.0
+		for i in range(len(path) - 1): dist += self.graph.edges[path[i], path[i + 1]].length
 
 		# Move from node to node
+		self.path = path
+		self.slots = slots
+		self.dist_to_do = dist
+		self.dist_done = 0.0
 		while len(self.path) > 0:
 			# Wait for node to be free
 			# if self.params['routing'] == True:
@@ -169,13 +196,16 @@ class AGV:
 					# time.sleep(td.total_seconds())
 
 			# Move to node if free
-			self.action.move_to_node(self.path[0])
+			try: 
+				self.action.move_to_node(self.path[0])
+			except:
+				return False
 
 		# Check if task is charging task
 		if task['message'] == 'charging':
 
 			# Update status
-			print("AGV " + str(self.id) + ":      Is charging for " + str(5) + " seconds")
+			print("AGV " + str(self.id) + ":        Is charging for " + str(5) + " seconds")
 			self.status = 'CHARGING'
 
 			# Charging
@@ -184,6 +214,8 @@ class AGV:
 			# Update robot status
 			self.battery_status = 100
 			self.status = 'IDLE'
+
+		return True
 
 	def search_closest_node(self, loc):
 		node = min(self.graph.nodes.values(), key=lambda node: self.calculate_euclidean_distance(node.pos, loc))
@@ -211,11 +243,11 @@ class AGV:
 	def update_global_robot_list(self, comm):
 		robot_dict = {"id": self.id, "ip": self.ip, "port": self.port, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
 				"status": self.status, "battery_status": self.battery_status, "travelled_time": self.travelled_time, "charged_time": self.charged_time,
-				"congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.path), "total_path": str(self.total_path)}
+				"congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.path), "total_path": str(self.total_path), "time_now": datetime.now().strftime('%H:%M:%S')}
 		comm.sql_add_to_table('global_robot_list', robot_dict)
 		comm.sql_update_robot(self.id, robot_dict)
 
-	def signal_handler(self, _, __):
+	def signal_handler1(self, _, __):
 
 		# Close threads
 		print("\nShutdown robot")
@@ -231,11 +263,22 @@ class AGV:
 		
 		# Make all tasks unassigned
 		tasks = []
-		local_task_list = comm.sql_get_local_task_list(self.id)
-		for task in local_task_list: tasks.append((-1, 'unassigned', '', 0, task['id']))
-		if not self.task_executing['id'] == -1: tasks.append((-1, 'unassigned', '', 0, self.task_executing['id']))
+		local_task_list = comm.sql_get_local_task_list(self.id) + [self.task_executing]
+		for task in local_task_list: 
+			if not task['message'] in ['homing', 'charging']:
+				tasks.append((-1, 'unassigned', '-', 0, "-", "-", "-", "-", "-", "-", 0, task['id']))
+			else:
+				tasks.append((-1, 'aborted', task['message'], 0, "-", "-", "-", "-", "-", "-", 0, task['id']))
 		if not len(tasks) == 0: comm.sql_update_tasks(tasks)
 
 		# Close connection
 		comm.sql_close()
+		exit(0)
+
+	def signal_handler2(self, _, __):
+
+		# Close threads
+		print("\nShutdown robot")
+		self.exit_event.set()
+		time.sleep(1)
 		exit(0)

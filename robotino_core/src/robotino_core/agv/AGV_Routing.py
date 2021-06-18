@@ -43,7 +43,7 @@ class Routing:
 			for task in local_task_list:
 
 				# Do dmas
-				best_path, best_slots, _ = self.dmas(start_node, [task['node']], start_time)
+				best_path, best_slots = self.dmas(start_node, [task['node']], start_time)
 
 				if best_path:
 
@@ -79,18 +79,18 @@ class Routing:
 		if local_feasible_paths:
 
 			# Exploration ants
-			explored_paths, fitness_values, _, total_delays, slots = self.explore(self.agv.id, local_feasible_paths, start_time)
+			explored_paths, fitness_values, total_cost, total_delays, slots = self.explore(self.agv.id, local_feasible_paths, start_time)
 
 			# Best route selection
 			best_path = explored_paths[int(np.argmin(fitness_values))]
 			best_slots = slots[int(np.argmin(fitness_values))]
 			best_delay = total_delays[int(np.argmin(fitness_values))]
 
-			return best_path[1:], best_slots, best_delay
+			return best_path[1:], best_slots
 
 		else:
 			print("No feasible paths found")
-			return None, None, None
+			return None, None
 
 	def think(self, start_node, nodes_to_visit):
 		global_best_solution, local_best_solutions = feasibility_ant_solve(self.agv.graph, start_node, nodes_to_visit)

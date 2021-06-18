@@ -1,6 +1,8 @@
 from robotino_core.solvers.tsp_solver import tsp
 from robotino_core.Comm import Comm
 import pickle
+import numpy as np
+from datetime import datetime, timedelta
 
 class TaskAllocation:
 	"""
@@ -34,6 +36,25 @@ class TaskAllocation:
 			if self.agv.exit_event.is_set():
 				break
 
+	def progress_tracker(self):
+
+		# Open database connection
+		comm = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
+		comm.sql_open()
+
+		# Loop
+		while True:
+			if not self.agv.task_executing['id'] == -1:
+				if not self.agv.dist_to_do == 0.0:
+					progress = (self.agv.dist_done / self.agv.dist_to_do) * 100
+					task_dict = {'progress': progress}
+					comm.sql_update_task(self.agv.task_executing['id'], task_dict)
+
+			# Close thread at close event 
+			if self.agv.exit_event.is_set():
+				break
+				
+
 	def handle_client(self, conn, _):
 
 		# Receive message
@@ -55,14 +76,15 @@ class TaskAllocation:
 
 			# Send bid to the auctioneer
 			conn.sendall(pickle.dumps(bid))
-			print("Agv " + str(self.agv.id) + ":        Sent bid " + str(bid['values']) + " to auctioneer")
+			print("Agv " + str(self.agv.id) + ":        Sent bid " + str(bid['values'][:2]) + " to auctioneer")
 
 		elif task['message'] == 'assign':
 
 			# Add assigned tasks optimally to local task list
-			self.update_local_task_list(task)
-			conn.sendall(pickle.dumps('task_accepted'))
-			print("Agv " + str(self.agv.id) + ":        Added task " + str(task['id']) + " to local task list")
+			result = self.update_local_task_list(task)
+			if result:
+				conn.sendall(pickle.dumps('task_accepted'))
+				print("Agv " + str(self.agv.id) + ":        Added task " + str(task['id']) + " to local task list")
 
 		# Close connection
 		conn.close()
@@ -92,15 +114,14 @@ class TaskAllocation:
 		min_sum = new_cost - current_cost
 		min_max = new_cost
 
-		# Start time of new task
+		# Compute start, end and duration
 		task_index = new_sequence.index(task)
-		if task_index == 0:
-			start_time = new_edges[0]
-		else:
-			start_time = sum(new_edges[0:task_index])
+		start_time = timedelta(seconds=sum(new_edges[0:task_index])) + datetime.now()
+		end_time = timedelta(seconds=sum(new_edges[0:task_index+1])) + datetime.now()
+		duration = end_time - start_time
 
 		# Objective list
-		objective_list = [min_sum, min_max, start_time]
+		objective_list = [min_sum, min_max, start_time, end_time, duration]
 
 		return objective_list
 
@@ -120,17 +141,27 @@ class TaskAllocation:
 		start_node = self.agv.task_executing['node'] if not self.agv.task_executing['id'] == -1 else self.agv.node
 
 		# Compute task sequence
-		task_sequence, _, _ = self.compute_task_sequence_and_cost(new_local_task_list, start_node)
+		task_sequence, edges, _ = self.compute_task_sequence_and_cost(new_local_task_list, start_node)
 
 		# Add new local task list
 		tasks = []
 		priority = 1
 		for task in task_sequence:
-			tasks.append((self.agv.id, 'assigned', 'assign', priority, task['id']))
+
+			# Compute start, end and duration
+			task_index = task_sequence.index(task)
+			start_time = timedelta(seconds=sum(edges[0:task_index])) + datetime.now()
+			end_time = timedelta(seconds=sum(edges[0:task_index+1])) + datetime.now()
+			duration = end_time - start_time
+
+			# Update task
+			tasks.append((self.agv.id, 'assigned', 'assign', priority, start_time.strftime('%H:%M:%S'), end_time.strftime('%H:%M:%S'), str(duration), '-', '-', '-', 0, task['id']))
 			priority += 1
 						
 		# Assign task to agv task lists
-		self.comm.sql_update_tasks(tasks)
+		result = self.comm.sql_update_tasks(tasks)
+
+		return result
 
 	###
 	# Compute task sequence and cost
@@ -145,6 +176,7 @@ class TaskAllocation:
 		nodes_to_visit = [task['node'] for task in task_list]
 		task_sequence_, _, edges = tsp(self.agv.graph, start_node, nodes_to_visit)
 		task_sequence = [task_list[nodes_to_visit.index(name)] for name in task_sequence_]
+		edges = np.array(edges) / self.agv.params['robot_speed']
 		cost = sum(edges)
 
 		###
