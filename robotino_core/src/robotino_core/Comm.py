@@ -183,39 +183,39 @@ class Comm:
 		values = ', '.join(["%s"]*len(item.values()))
 		sql = 'INSERT IGNORE INTO {} ({fields}) VALUES ({values})'.format(table, fields=fields, values=values)
 		val = tuple(item.values())
-		try:
-			self.__cursor.execute(sql, val)
-			self.__conn.commit()
-			return self.__cursor.lastrowid
-		except:
-			print("Database not alive")
-			return None
+		#try:
+		self.__cursor.execute(sql, val)
+		self.__conn.commit()
+		return self.__cursor.lastrowid
+		#except:
+			#print("Database not alive")
+			#return None
 
 	def sql_select_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
 		assert isinstance(criterium, str)
 		sql = "SELECT * FROM {} WHERE {} = %s".format(table, criterium) + " ORDER BY id"
 		val = (value,)
-		try:
-			self.__conn.reconnect()
-			self.__cursor.execute(sql, val)
-			result = self.__cursor.fetchall()
-			return result
-		except:
-			print("Database not alive")	
-			return None
+		#try:
+		self.__conn.reconnect()
+		self.__cursor.execute(sql, val)
+		result = self.__cursor.fetchall()
+		return result
+		#except:
+			#print("Database not alive")	
+			#return None
 		
 	def sql_select_everything_from_table(self, table):
 		assert isinstance(table, str)
 		sql = "SELECT * FROM {}".format(table) + " ORDER BY id"
-		try:
-			self.__conn.reconnect()
-			self.__cursor.execute(sql)
-			result = self.__cursor.fetchall()
-			return result
-		except:
-			print("Database not alive")	
-			return None
+		#try:
+		self.__conn.reconnect()
+		self.__cursor.execute(sql)
+		result = self.__cursor.fetchall()
+		return result
+		#except:
+		#print("Database not alive")	
+		#return None
 
 	def sql_delete_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
@@ -223,52 +223,52 @@ class Comm:
 		assert isinstance(value, int)
 		sql = "DELETE FROM {} WHERE {} = %s".format(table, criterium)
 		val = (value,)
-		try:
-			self.__cursor.execute(sql, val)
-			self.__conn.commit()
-			return True
-		except:
-			print("Database not alive")	
-			return False
+		#try:
+		self.__cursor.execute(sql, val)
+		self.__conn.commit()
+		return True
+		#except:
+			#print("Database not alive")	
+			#return False
 
 	def sql_delete_everything_from_table(self, table):
 		assert isinstance(table, str)
 		assert isinstance(table, str)
 		sql = "DELETE FROM {}".format(table)
-		try:
-			self.__cursor.execute(sql)
-			self.__conn.commit()
-			return True
-		except:
-			print("Database not alive")	
-			return False
+		#try:
+		self.__cursor.execute(sql)
+		self.__conn.commit()
+		return True
+		#except:
+			#print("Database not alive")	
+			#return False
 
 	def sql_get_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
 		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'assigned' ORDER BY priority"
 		val = (robot_id,)
-		try:
-			self.__conn.reconnect()
-			self.__cursor.execute(sql, val)
-			result = self.__cursor.fetchall()
-			return result
-		except:
-			print("Database not alive")	
-			self.sql_open()
-			return None
+		#try:
+		self.__conn.reconnect()
+		self.__cursor.execute(sql, val)
+		result = self.__cursor.fetchall()
+		return result
+		#except:
+			#print("Database not alive")	
+			#self.sql_open()
+			#return None
 
 	def sql_delete_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
 		sql = "DELETE FROM global_task_list WHERE robot = %s AND status = 'assigned'"
 		val = (robot_id,)
-		try:
-			self.__conn.reconnect()
-			self.__cursor.execute(sql, val)
-			self.__conn.commit()
-			return True
-		except:
-			print("Database not alive")
-			return False
+		#try:
+		self.__conn.reconnect()
+		self.__cursor.execute(sql, val)
+		self.__conn.commit()
+		return True
+		#except:
+			#print("Database not alive")
+			#return False
 
 	def sql_update_robot(self, id, robot): 
 		assert isinstance(id, int)
@@ -296,13 +296,13 @@ class Comm:
 					id = {}
 				""".format(id)
 		val = tuple(robot.values())
-		try:
-			self.__cursor.execute(sql, val)
-			self.__conn.commit()
-			return True
-		except:
-			print("Database not alive")	
-			return False
+		#try:
+		self.__cursor.execute(sql, val)
+		self.__conn.commit()
+		return True
+		#except:
+			#print("Database not alive")	
+			#return False
 
 	def sql_update_task(self, id, task):
 		assert isinstance(id, int)
@@ -319,13 +319,13 @@ class Comm:
 					id = {}
 				""".format(id)
 		val = tuple(task.values())
-		try:
-			self.__cursor.execute(sql, val)
-			self.__conn.commit()
-			return True
-		except:
-			print("Database not alive")	
-			return False
+		#try:
+		self.__cursor.execute(sql, val)
+		self.__conn.commit()
+		return True
+		#except:
+			#print("Database not alive")	
+			#return False
 
 	def sql_update_tasks(self, tasks):
 		assert isinstance(tasks, list)
@@ -347,13 +347,13 @@ class Comm:
 					id = %s
 				"""
 		val = tasks
-		try:
-			self.__cursor.executemany(sql, val)
-			self.__conn.commit()
-			return True
-		except:
-			print("Database not alive")	
-			return False
+		#try:
+		self.__cursor.executemany(sql, val)
+		self.__conn.commit()
+		return True
+		#except:
+			#print("Database not alive 1")	
+			#return False
 
 	def print_database(self):
 		try:

@@ -65,11 +65,11 @@ class AGV:
 		self.charged_time = 0.0
 		self.congestions = 0
 		self.task_executing = {'id': -1, 'node': None}
-		self.path = []
+		self.surrent_path = []
 		self.total_path = []
 		
 		# Dmas attributes
-		self.slots = []
+		self.current_slots = []
 		self.reserved_paths = {}
 		self.reserved_slots = {}
 
@@ -186,20 +186,20 @@ class AGV:
 	def execute_task(self, task):
 
 		# Compute dmas path towards task destination
-		self.path, _ = find_shortest_path(self.graph, self.node, task['node'])
-		self.path = self.path[1:]
-		print(self.path)
+		self.current_path, _ = find_shortest_path(self.graph, self.node, task['node'])
+		self.current_path = self.current_path[1:]
+		print(self.current_path)
 
 		# Move from node to node
 		while not rospy.is_shutdown():
 			
-			result = self.action.move_to_node(self.path[0])
+			result = self.action.move_to_node(self.current_path[0])
 			if result: 
 				rospy.loginfo("Goal execution done!")
-				self.path = self.path[1:]
-				#self.slots = self.slots[1:]
+				self.current_path = self.current_path[1:]
+				#self.current_slots = self.slots[1:]
 
-			if not len(self.path) > 0:
+			if not len(self.current_path) > 0:
 				break
 
 			rospy.on_shutdown(self.shutdown)
@@ -244,6 +244,6 @@ class AGV:
 	def update_global_robot_list(self):
 		robot_dict = {"id": self.id, "ip": self.ip, "port": self.port, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
 				"status": self.status, "battery_status": self.battery_status, "travelled_time": self.travelled_time, "charged_time": self.charged_time,
-				"congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.path), "total_path": str(self.total_path)}
+				"congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.current_path), "total_path": str(self.total_path)}
 		self.comm.sql_add_to_table('global_robot_list', robot_dict)
 		self.comm.sql_update_robot(self.id, robot_dict)

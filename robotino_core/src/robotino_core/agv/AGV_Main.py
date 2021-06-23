@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import math
 import threading
 import time
@@ -15,6 +15,7 @@ from robotino_core.agv.AGV_ResourceManagement import ResourceManagement
 from robotino_core.solvers.astar_solver import find_shortest_path
 
 class AGV:
+
 	"""
 		A class containing the intelligence of the agv agent
 	"""
@@ -37,10 +38,10 @@ class AGV:
 
 		# Create graph
 		self.graph = Graph()
-		node_neighbors = self.params['node_neighbors']
-		node_locations = self.params['node_locations']
-		self.graph.create_nodes(list(node_locations.values()), list(node_locations.keys()))
-		self.graph.create_edges(list(node_neighbors.keys()), list(node_neighbors.values()))
+		self.node_neighbors = self.params['node_neighbors']
+		self.node_locations = self.params['node_locations']
+		self.graph.create_nodes(list(self.node_locations.values()), list(self.node_locations.keys()))
+		self.graph.create_edges(list(self.node_neighbors.keys()), list(self.node_neighbors.values()))
 
 		# Updated attributes
 		self.id = id
@@ -53,16 +54,21 @@ class AGV:
 		self.travelled_time = 0.0
 		self.charged_time = 0.0
 		self.congestions = 0
+
+		# Attribute of current executing task
 		self.task_executing = {'id': -1, 'node': None, 'message': '-'}
-		self.path = [] # Current executing path
+		self.current_path = [] # Current executing path
+		self.current_slots = [] # Current executing slots
 		self.dist_to_do = 0.0 # Current distance to execute
 		self.dist_done = 0.0 # Current distance already executed
-		self.total_path = []
+		self.start_time = timedelta()
+		self.estimated_end_time = 0.0 # Estimated end time of executing task
+		self.estimated_duration = 0.0 # Estimated duration of executing task
 
-		# Dmas attributes
-		self.slots = []
-		self.reserved_paths = {}
-		self.reserved_slots = {}
+		# Attributes of planned path through all assigned tasks
+		self.total_path = [] # Total planned path of tasks in local task list
+		self.reserved_paths = {} # All planned paths for tasks in local task list
+		self.reserved_slots = {} # All reserved slots for tasks in local task list
 
 		# Depot station
 		self.depot = self.search_closest_node(loc)
@@ -84,10 +90,13 @@ class AGV:
 		y = threading.Thread(target=self.odom_callback)
 		y.daemon = True
 		y.start()
-		q = threading.Thread(target=self.task_allocation.main)
+		z = threading.Thread(target=self.task_allocation.main)
+		z.daemon = True
+		z.start()
+		q = threading.Thread(target=self.task_allocation.progress_tracker)
 		q.daemon = True
 		q.start()
-		r = threading.Thread(target=self.task_allocation.progress_tracker)
+		r = threading.Thread(target=self.task_allocation.local_consensus)
 		r.daemon = True
 		r.start()
 		s = threading.Thread(target=self.routing.main)
@@ -96,33 +105,34 @@ class AGV:
 		t = threading.Thread(target=self.routing.homing)
 		t.daemon = True
 		t.start()
-		u = threading.Thread(target=self.resource_management.main)
-		u.daemon = True
-		u.start()
+		#u = threading.Thread(target=self.resource_management.main)
+		#u.daemon = True
+		#u.start()
 		x.join()
 		y.join()
+		z.join()
 		q.join()
 		r.join()
 		s.join()
 		t.join()
-		u.join()
+		#u.join()
 
 	def main(self):
 
 		# Open database connection
 		print("\nAGV " + str(self.id) + ":                       Started")
-		comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
-		comm.sql_open()
+		self.comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
+		self.comm.sql_open()
 
 		# Loop
 		while True:
 
-			# Wait for a task on the local task list
-			items = comm.sql_get_local_task_list(self.id)
+			# Wait for a task on the local task list and pick first (lowest priority)
+			items = self.comm.sql_get_local_task_list(self.id)
 			if items: 
 				for row in items: self.task_executing = row; break 
 
-			# Execute task
+			# Execute task if exist
 			if not self.task_executing['id'] == -1:
 				
 				# Start task
@@ -130,32 +140,31 @@ class AGV:
 				if self.status != 'EMPTY': self.status = 'BUSY'
 
 				# Remove from local task list and add task to executing list
-				start_time = datetime.now()
-				task_dict = {'robot': self.id, 'status': 'executing', 'message': self.task_executing['message'], 'priority': self.task_executing['priority'], 'real_start_time': start_time.strftime('%H:%M:%S')}
-				comm.sql_update_task(self.task_executing['id'], task_dict)
+				self.start_time = datetime.now()
+				task_dict = {'robot': self.id, 'status': 'executing', 'message': self.task_executing['message'], 'priority': self.task_executing['priority'], 'real_start_time': self.start_time.strftime('%H:%M:%S')}
+				self.comm.sql_update_task(self.task_executing['id'], task_dict)
 
-				# Go to task
+				# Execute task
 				result = self.execute_task(self.task_executing)
 
 				# If task reached
 				if result:
 
 					# Perform task
-					self.action.pick()
-					print("Agv " + str(self.id) + ":        Picked item of task " + str(self.task_executing['id']))
+					if not self.task_executing['message'] not in ['homing', 'charging']: self.action.pick()
 
 					# Task executed
 					end_time = datetime.now()
-					duration = end_time - start_time
+					duration = end_time - self.start_time
 					task_dict = {'robot': self.id, 'status': 'done', 'message': self.task_executing['message'], 'priority': self.task_executing['priority'], 'real_end_time': end_time.strftime('%H:%M:%S'), 'real_duration': str(duration)}
-					comm.sql_update_task(self.task_executing['id'], task_dict)
+					self.comm.sql_update_task(self.task_executing['id'], task_dict)
 					self.task_executing = {'id': -1, 'node': None}
 
 				else:
 
-					# Make task unnasigned
-					task_dict = {'id': -1, 'status': 'unassigned', 'message': '-', 'priority': 0}
-					comm.sql_update_task(self.task_executing['id'], task_dict)
+					# Make task unnasigned if not able to reach
+					task_dict = {'status': 'unassigned', 'message': '-', 'priority': 0}
+					self.comm.sql_update_task(self.task_executing['id'], task_dict)
 					self.task_executing = {'id': -1, 'node': None}
 
 				# Set status to IDLE when task is done or when done charging
@@ -183,23 +192,23 @@ class AGV:
 		for i in range(len(path) - 1): dist += self.graph.edges[path[i], path[i + 1]].length
 
 		# Move from node to node
-		self.path = path
-		self.slots = slots
+		self.current_path = path
+		self.current_slots = slots
 		self.dist_to_do = dist
-		self.dist_done = 0.0
-		while len(self.path) > 0:
-			# Wait for node to be free
-			# if self.params['routing'] == True:
-				# node_arriving_time = self.slots[0][0]
-				# if node_arriving_time > datetime.now():
-					# td = node_arriving_time - datetime.now()
-					# time.sleep(td.total_seconds())
+		self.dist_done = 0.0 
+		while len(self.current_path) > 0:
 
+			# Wait for node to be free
+			if self.params['routing'] == True:
+				node_arriving_time = self.current_slots[0][0]
+				if node_arriving_time > datetime.now():
+					print("Agv " + str(self.id) + ":        Waits " + str(td) + " seconds")
+					td = node_arriving_time - datetime.now()
+					time.sleep(td.total_seconds())
+					
 			# Move to node if free
-			try: 
-				self.action.move_to_node(self.path[0])
-			except:
-				return False
+			result = self.action.move_to_node(self.current_path[0])
+			if not result: return False
 
 		# Check if task is charging task
 		if task['message'] == 'charging':
@@ -243,14 +252,14 @@ class AGV:
 	def update_global_robot_list(self, comm):
 		robot_dict = {"id": self.id, "ip": self.ip, "port": self.port, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
 				"status": self.status, "battery_status": self.battery_status, "travelled_time": self.travelled_time, "charged_time": self.charged_time,
-				"congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.path), "total_path": str(self.total_path), "time_now": datetime.now().strftime('%H:%M:%S')}
+				"congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.current_path), "total_path": str(self.total_path), "time_now": datetime.now().strftime('%H:%M:%S')}
 		comm.sql_add_to_table('global_robot_list', robot_dict)
 		comm.sql_update_robot(self.id, robot_dict)
 
 	def signal_handler1(self, _, __):
 
 		# Close threads
-		print("\nShutdown robot")
+		print("\nShutdown robot with communication possibilities")
 		self.exit_event.set()
 		time.sleep(1)
 		
@@ -278,7 +287,7 @@ class AGV:
 	def signal_handler2(self, _, __):
 
 		# Close threads
-		print("\nShutdown robot")
+		print("\nShutdown robot without communication possibilities")
 		self.exit_event.set()
 		time.sleep(1)
 		exit(0)

@@ -11,7 +11,7 @@ class ResourceManagement:
 
 	def __init__(self, agv):
 
-		# agv
+		# AGV
 		self.agv = agv
 
 		# Temporal optimization params

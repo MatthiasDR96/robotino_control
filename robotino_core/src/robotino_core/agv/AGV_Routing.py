@@ -13,7 +13,7 @@ class Routing:
 
 	def __init__(self, agv):
 
-		# agv
+		# AGV
 		self.agv = agv
 
 	def main(self):
@@ -36,15 +36,18 @@ class Routing:
 			start_node = self.agv.task_executing['node'] if not self.agv.task_executing['id'] == -1 else self.agv.node
 
 			# Get start time of robot
-			start_time = datetime.now() #if self.agv.task_executing['id'] == -1 and len(self.agv.slots) == 0 else self.agv.slots[-1][0] + self.agv.slots[-1][1]
+			start_time = datetime.now() if self.agv.task_executing['id'] == -1 else self.agv.estimated_end_time
 
 			# Update paths for each task in local task list
 			total_path = []
+			updated_tasks = []
+			estimated_start_time = start_time
 			for task in local_task_list:
 
 				# Do dmas
-				best_path, best_slots = self.dmas(start_node, [task['node']], start_time)
+				best_path, best_slots = self.dmas(start_node, [task['node']], estimated_start_time)
 
+				# If a solution exist
 				if best_path:
 
 					# Set paths towards all tasks
@@ -54,17 +57,27 @@ class Routing:
 					# Set total planned path
 					total_path.extend(best_path)
 
-					# Start node for next task is end node of previous task
-					start_node = task['node']
-
-					# Starting time for next task
-					start_time = best_slots[-1][0] + best_slots[-1][1]
+					# Estimated end time and duration
+					estimated_end_time = best_slots[-1][0] + best_slots[-1][1]
+					estimated_duration = estimated_end_time - estimated_start_time
 
 					# Reserve slots
 					self.intent(self.agv.id, best_path, best_slots)
 
+					# Update task
+					updated_tasks.append((self.agv.id, task['status'], task['message'], task['priority'], estimated_start_time.strftime('%H:%M:%S'), estimated_end_time.strftime('%H:%M:%S'), str(estimated_duration), '-', '-', '-', 0, task['id']))
+			
+					# Estimated start time for next task
+					estimated_start_time = estimated_end_time
+
+					# Start node for next task is end node of previous task
+					start_node = task['node']
+
 			# Update total path
 			self.agv.total_path = total_path
+						
+			# Update tasks
+			comm.sql_update_tasks(updated_tasks)
 
 			# Close thread at close event 
 			if self.agv.exit_event.is_set():
@@ -168,5 +181,5 @@ class Routing:
 				if len(local_task_list) == 0 and self.agv.task_executing['id'] == -1 and not self.agv.node == self.agv.depot:
 
 					# Add task to task list
-					task_dict = {"node": self.agv.depot, "priority": 1, "robot": self.agv.id, "message": 'homing', "status": 'assigned'}
+					task_dict = {"node": self.agv.depot, "priority": 1, "robot": self.agv.id, "message": 'homing', "status": 'assigned', 'estimated_start_time': datetime.now().strftime('%H:%M:%S')}
 					comm.sql_add_to_table('global_task_list', task_dict)
