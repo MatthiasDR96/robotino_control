@@ -27,7 +27,7 @@ class Routing:
 		while True:
 
 			# Timeout
-			time.sleep(self.agv.params['dmas_update_rate'])
+			time.sleep(self.agv.params['dmas_rate'])
 
 			# Get tasks in local task list
 			local_task_list = comm.sql_get_local_task_list(self.agv.id)

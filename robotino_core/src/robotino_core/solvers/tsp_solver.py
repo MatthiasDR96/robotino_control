@@ -3,7 +3,7 @@ import itertools
 import random
 from copy import copy
 
-from robotino_core.solvers.astar_solver import *
+from robotino_factory.solvers.astar_solver import *
 
 alpha = 1  # relative importance of pheromone (default=1)
 beta = 3  # relative importance of distance (default=3)
@@ -35,7 +35,7 @@ def tsp(graph, start_node, nodes_to_visit):
     """
 
     # Tak deepcopy of graph
-    graph = deepcopy(graph)
+    #graph = deepcopy(graph)
 
     # If no nodes to visit, return start position
     if len(nodes_to_visit) == 0:

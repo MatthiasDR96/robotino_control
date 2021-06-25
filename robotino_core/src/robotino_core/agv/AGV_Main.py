@@ -37,12 +37,10 @@ class AGV:
 			self.params = yaml.load(file, Loader=yaml.FullLoader)
 
 		# Create graph
-		self.graph = Graph()
-		self.node_neighbors = self.params['node_neighbors']
-		self.node_locations = self.params['node_locations']
-		self.graph.create_nodes(list(self.node_locations.values()), list(self.node_locations.keys()))
-		self.graph.create_edges(list(self.node_neighbors.keys()), list(self.node_neighbors.values()))
-
+		self.comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
+		self.comm.sql_open()
+		self.graph = self.comm.get_graph()
+		
 		# Updated attributes
 		self.id = id
 		self.x_loc = loc[0]
@@ -121,8 +119,6 @@ class AGV:
 
 		# Open database connection
 		print("\nAGV " + str(self.id) + ":                       Started")
-		self.comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
-		self.comm.sql_open()
 
 		# Loop
 		while True:

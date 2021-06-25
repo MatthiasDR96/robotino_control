@@ -20,7 +20,7 @@ def find_shortest_path(graph, start_node, end_node):
     """
 
     # Tak deepcopy of graph
-    graph = deepcopy(graph)
+    # graph = deepcopy(graph) TODO commenting can cause problems
 
     # Get nodes from node names
     start_node = graph.nodes[start_node]

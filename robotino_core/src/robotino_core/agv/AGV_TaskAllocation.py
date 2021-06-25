@@ -2,6 +2,8 @@ from robotino_core.solvers.tsp_solver import tsp
 from robotino_core.Comm import Comm
 import time
 import pickle
+import socket
+from multiprocessing import Pool
 import numpy as np
 from datetime import datetime, timedelta
 from _thread import start_new_thread
@@ -32,7 +34,7 @@ class TaskAllocation:
 			conn, addr = comm.sock_server.accept()
 
 			# Handle in separate thread
-			self.handle_client(conn, addr)
+			start_new_thread(self.handle_client, (conn, addr))
 
 			# Close thread at close event 
 			if self.agv.exit_event.is_set():
@@ -76,52 +78,54 @@ class TaskAllocation:
 		while True:
 
 			# Timeout
-			time.sleep(2)
+			time.sleep(self.agv.params['local_consensus_rate'])
 
 			# Get all robots in the fleet
 			robots = comm.sql_select_everything_from_table('global_robot_list')
 
 			# Remove this robot
-			if robots is not None: robots = [robot for robot in robots if robot['id'] != self.agv.id]
+			robots = [robot for robot in robots if robot['id'] != self.agv.id] if robots is not None else []
 
 			# Iterate over all tasks in local task list
+			combinations = []
 			local_task_list = comm.sql_get_local_task_list(self.agv.id)
 			if local_task_list is not None:
-				for task in local_task_list:
+				for robot in robots:
+					for task in local_task_list:
+						task['message'] = "announce"
+						combinations.append((robot['ip'], robot['port'], task))
 
-					# Announce
-					task['message'] = "announce"
+			# Working pool
+			self.p = Pool(processes=max(1, len(combinations)))
+			bids = self.p.map(tcp_client, combinations)
+			bids = [bid for bid in bids if bid]
 
-					# Announce tasks and receive bids
-					bids = []
-					for robot in robots:
-						# print("Announce task " + str(task['id']) + ' to robot ' + str(robot['id']))
-						data = comm.tcp_client(robot['ip'], robot['port'], task)
-						if data is not None: bids.append(data)
-
-					# If there are valid bids
-					if bids: 
+			# If there are valid bids
+			if len(bids) > 0: 
 						
-						# Resolution
-						best_bid = self.resolution_lb(bids) 
+				# Resolution
+				best_bid_dict = self.resolution_lb(bids)
+				best_bid = best_bid_dict['values'][0] # self.agv.params['epsilon'] * best_bid_list['values'][0] + (1 - self.agv.params['epsilon']) * best_bid_list['values'][1]
 
-						# My bid
-						#my_bid = datetime.strptime(task['estimated_start_time'], '%H:%M:%S').time() 
-						my_bid = self.compute_bid(local_task_list, task, True)
+				# My bid
+				my_bid_list = self.compute_bid(local_task_list, task, True) # datetime.strptime(task['estimated_start_time'], '%H:%M:%S').time() 
+				my_bid = my_bid_list[0] # self.agv.params['epsilon'] * my_bid_list[0] + (1 - self.agv.params['epsilon']) * my_bid_list[1]
 
-						# If best bid is better than my bid
-						if best_bid['values'][0] < my_bid[0]:
+				# If best bid is better than my bid
+				if best_bid + my_bid < 0:
 
-							# Send task to winning robot
-							robot = best_bid['robot']
-							best_bid['task']['message'] = 'assign'
-							best_bid['task']['robot'] = robot['id']
-							comm.tcp_client(robot['ip'], robot['port'], best_bid['task'])
+					print("Better solution found")
+
+					# Send task to winning robot
+					robot = best_bid_dict['robot']
+					best_bid_dict['task']['message'] = 'assign'
+					best_bid_dict['task']['robot'] = robot['id']
+					comm.tcp_client(robot['ip'], robot['port'], best_bid_dict['task'])
 
 	def resolution_lb(self, bids):
-		bids.sort(key=lambda p: p['values'][2]) # Minimize start time of task
-		best_bid = bids[0]
-		return best_bid		
+		bids.sort(key=lambda p: self.agv.params['epsilon'] * p['values'][0] + (1 - self.agv.params['epsilon']) * p['values'][1])
+		best_bid = bids[0] 
+		return best_bid	
 				
 	def handle_client(self, conn, _):
 
@@ -134,7 +138,7 @@ class TaskAllocation:
 						
 		# Convert data to dictionary
 		task = pickle.loads(data)
-		#print('\nAGV ' + str(self.agv.id) +'         Received task: ' + str(task['id']))
+		print('AGV ' + str(self.agv.id) +'         Received task: ' + str(task['id']))
 
 		# Get local task list
 		local_task_list = comm.sql_get_local_task_list(self.agv.id)
@@ -151,7 +155,7 @@ class TaskAllocation:
 
 			# Send bid to the auctioneer
 			conn.sendall(pickle.dumps(bid))
-			# print("Agv " + str(self.agv.id) + ":        Sent bid " + str(bid['values'][:2]) + " to auctioneer")
+			print("Agv " + str(self.agv.id) + ":        Sent bid " + str(bid['values'][:2]) + " to auctioneer")
 
 		elif task['message'] == 'assign':
 
@@ -267,3 +271,45 @@ class TaskAllocation:
 			# cost += charging_cost
 
 		return task_sequence, edges, cost
+
+def tcp_client(x):
+
+	ip = x[0]
+	port = x[1]
+	data = x[2]
+	attempts = 0
+	while True:
+
+		try:
+
+			# Create a TCP/IP socket
+			sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+			# Connect the socket to the port where the server is listening
+			sock.connect((ip, port))
+					
+			# Make message
+			pickled_data = pickle.dumps(data)
+
+			# Send data
+			sock.sendall(pickled_data)
+
+			# Look for the response
+			rec_data = sock.recv(1024)
+			rec_data_loaded = pickle.loads(rec_data)
+			if not isinstance(rec_data_loaded, str):
+				print("Central auctioneer:		Received bid " + str(rec_data_loaded['values'][:2]) + " from AGV " + str(rec_data_loaded['robot']['id']) + ' on task ' + str(rec_data_loaded['task']['id']) + ' at ' + str(datetime.now().time()))
+			return rec_data_loaded
+
+		except(socket.error):
+			print("\nConnection failed from " + str(port) + " to " + str(port) + " , retrying...")
+			attempts += 1
+			if attempts > 3:
+				return None
+		except EOFError:
+			print("\nReceived message from " + str(port) + " not correct, retrying...")
+			attempts += 1
+			if attempts > 3:
+				return None
+		finally:
+			sock.close()
