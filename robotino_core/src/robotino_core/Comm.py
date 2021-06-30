@@ -200,14 +200,14 @@ class Comm:
 		assert isinstance(criterium, str)
 		sql = "SELECT * FROM {} WHERE {} = %s".format(table, criterium) + " ORDER BY id"
 		val = (value,)
-		try:
-			self.__conn.reconnect()
-			self.__cursor.execute(sql, val)
-			result = self.__cursor.fetchall()
-			return result
-		except:
-			print("Database not alive")	
-			return None
+		#try:
+		self.__conn.reconnect()
+		self.__cursor.execute(sql, val)
+		result = self.__cursor.fetchall()
+		return result
+		#except:
+			#print("Database not alive")	
+			#return None
 		
 	def sql_select_everything_from_table(self, table):
 		assert isinstance(table, str)
@@ -271,6 +271,19 @@ class Comm:
 			self.sql_open()
 			return None
 
+	def sql_get_executing_task(self, robot_id):
+		assert isinstance(robot_id, int)
+		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'executing' ORDER BY priority"
+		val = (robot_id,)
+		try:
+			self.__conn.reconnect()
+			self.__cursor.execute(sql, val)
+			result = self.__cursor.fetchall()
+			return result
+		except:
+			print("Database not alive")	
+			return None
+
 	def sql_delete_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
 		sql = "DELETE FROM global_task_list WHERE robot = %s AND status = 'assigned'"
@@ -303,6 +316,7 @@ class Comm:
 					charged_time = %s,
 					congestions = %s,
 					task_executing = %s,
+					moving_to = %s,
 					path = %s,
 					total_path = %s,
 					time_now = %s
@@ -361,13 +375,13 @@ class Comm:
 					id = %s
 				"""
 		val = tasks
-		try:
-			self.__cursor.executemany(sql, val)
-			self.__conn.commit()
-			return True
-		except:
-			print("Database not alive 1")	
-			return False
+		#try:
+		self.__cursor.executemany(sql, val)
+		self.__conn.commit()
+		return True
+		#except:
+			#print("Database not alive 1")	
+			#return False
 
 	def print_database(self):
 		try:

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import math
 import threading
 import time
@@ -7,7 +7,6 @@ import yaml
 import os
 
 from robotino_core.Comm import Comm
-from robotino_core.Graph import Graph
 from robotino_core.agv.AGV_Action import Action
 from robotino_core.agv.AGV_Routing import Routing
 from robotino_core.agv.AGV_TaskAllocation import TaskAllocation
@@ -20,7 +19,7 @@ class AGV:
 		A class containing the intelligence of the agv agent
 	"""
 
-	def __init__(self, ip, port, id, host, user, password, database, loc):
+	def __init__(self, ip, port, id, host, user, password, database, loc, ta_agent, ro_agent, rm_agent):
 
 		# Params
 		self.ip = ip
@@ -55,16 +54,15 @@ class AGV:
 
 		# Attribute of current executing task
 		self.task_executing = {'id': -1, 'node': None, 'message': '-'}
-		self.current_path = [] # Current executing path
-		self.current_slots = [] # Current executing slots
-		self.dist_to_do = 0.0 # Current distance to execute
+		self.dist_to_do = 0.0 # Current distance to execute 
 		self.dist_done = 0.0 # Current distance already executed
-		self.start_time = timedelta()
-		self.estimated_end_time = 0.0 # Estimated end time of executing task
-		self.estimated_duration = 0.0 # Estimated duration of executing task
+		self.start_time = None # Start time of executing task
+		self.estimated_end_time = None # Estimated end time of executing task
 
 		# Attributes of planned path through all assigned tasks
-		self.total_path = [] # Total planned path of tasks in local task list
+		self.current_node = self.node # Current node moving to
+		self.current_path = [] # Current path following
+		self.total_path = [] # Total planned path 
 		self.reserved_paths = {} # All planned paths for tasks in local task list
 		self.reserved_slots = {} # All reserved slots for tasks in local task list
 
@@ -72,48 +70,46 @@ class AGV:
 		self.depot = self.search_closest_node(loc)
 
 		# Task agents
-		self.task_allocation = TaskAllocation(self)
-		self.routing = Routing(self)
-		self.resource_management = ResourceManagement(self)
+		self.ta_agent = None
+		self.ro_agent = None
+		self.rm_agent = None		
 		self.action = Action(self)
 
 		# Exit procedure
 		self.exit_event = threading.Event()
-		signal.signal(signal.SIGINT, self.signal_handler2)
+		signal.signal(signal.SIGINT, self.signal_handler)
 
-		# Processes
-		x = threading.Thread(target=self.main)
-		x.daemon = True
-		x.start()
-		y = threading.Thread(target=self.odom_callback)
-		y.daemon = True
-		y.start()
-		z = threading.Thread(target=self.task_allocation.main)
-		z.daemon = True
-		z.start()
-		q = threading.Thread(target=self.task_allocation.progress_tracker)
-		q.daemon = True
-		q.start()
-		r = threading.Thread(target=self.task_allocation.local_consensus)
-		r.daemon = True
-		r.start()
-		s = threading.Thread(target=self.routing.main)
-		s.daemon = True
-		s.start()
-		t = threading.Thread(target=self.routing.homing)
-		t.daemon = True
-		t.start()
-		#u = threading.Thread(target=self.resource_management.main)
-		#u.daemon = True
-		#u.start()
-		x.join()
-		y.join()
-		z.join()
-		q.join()
-		r.join()
-		s.join()
-		t.join()
-		#u.join()
+		# Main AGV agent processes
+		threads = []
+		threads.append(threading.Thread(target=self.main))
+		threads.append(threading.Thread(target=self.odom_callback))
+
+		# Task allocation agent processes
+		if ta_agent:
+			self.ta_agent = TaskAllocation(self)
+			threads.append(threading.Thread(target=self.ta_agent.main))
+			threads.append(threading.Thread(target=self.ta_agent.progress_tracker))
+			threads.append(threading.Thread(target=self.ta_agent.local_consensus))
+
+		# Routing agent processes
+		if ro_agent:
+			self.ro_agent = Routing(self)
+			threads.append(threading.Thread(target=self.ro_agent.main))
+			threads.append(threading.Thread(target=self.ro_agent.homing))
+
+		# Resource management agent processes
+		if rm_agent:
+			self.rm_agent = ResourceManagement(self)
+			threads.append(threading.Thread(target=self.rm_agent.main))
+		
+		# Start processes
+		for thread in threads:
+			thread.daemon = True
+			thread.start()
+
+		# Join processes
+		for thread in threads:
+			thread.join()
 
 	def main(self):
 
@@ -124,9 +120,7 @@ class AGV:
 		while True:
 
 			# Wait for a task on the local task list and pick first (lowest priority)
-			items = self.comm.sql_get_local_task_list(self.id)
-			if items: 
-				for row in items: self.task_executing = row; break 
+			for row in self.comm.sql_get_local_task_list(self.id): self.task_executing = row; break 
 
 			# Execute task if exist
 			if not self.task_executing['id'] == -1:
@@ -137,25 +131,26 @@ class AGV:
 
 				# Remove from local task list and add task to executing list
 				self.start_time = datetime.now()
-				task_dict = {'robot': self.id, 'status': 'executing', 'message': self.task_executing['message'], 'priority': self.task_executing['priority'], 'real_start_time': self.start_time.strftime('%H:%M:%S')}
+				task_dict = {'robot': self.id, 'status': 'executing', 'real_start_time': self.start_time.strftime('%H:%M:%S')}
 				self.comm.sql_update_task(self.task_executing['id'], task_dict)
 
-				# Execute task
+				# Move to task
 				result = self.execute_task(self.task_executing)
 
 				# If task reached
 				if result:
 
-					# Perform task
+					# Pick task
 					if not self.task_executing['message'] not in ['homing', 'charging']: self.action.pick()
 
 					# Task executed
 					end_time = datetime.now()
 					duration = end_time - self.start_time
-					task_dict = {'robot': self.id, 'status': 'done', 'message': self.task_executing['message'], 'priority': self.task_executing['priority'], 'real_end_time': end_time.strftime('%H:%M:%S'), 'real_duration': str(duration)}
+					task_dict = {'status': 'done', 'real_end_time': end_time.strftime('%H:%M:%S'), 'real_duration': str(duration)}
 					self.comm.sql_update_task(self.task_executing['id'], task_dict)
 					self.task_executing = {'id': -1, 'node': None}
 
+				# If task not reached
 				else:
 
 					# Make task unnasigned if not able to reach
@@ -173,37 +168,50 @@ class AGV:
 	def execute_task(self, task):
 
 		# Compute path towards task destination
-		if self.params['routing']:
-			if task['id'] in self.reserved_paths.keys():
-				path = self.reserved_paths[task['id']]
-				slots = self.reserved_slots[task['id']]
-			else:
-				path, slots = self.routing.dmas(self.node, [task['node']], datetime.now())
+		if self.ro_agent:
+			self.dist_to_do = 0.0
+			if not task['id'] in self.reserved_paths.keys():
+				self.ro_agent.plan_executing_task(self.comm)
 		else:
-			path, dist = find_shortest_path(self.graph, self.node, task['node'])
-			slots = []
-
-		# Compute total distance to travel
-		dist = self.graph.edges[self.node, path[0]].length if path else 0.0
-		for i in range(len(path) - 1): dist += self.graph.edges[path[i], path[i + 1]].length
+			path, dist = find_shortest_path(self.comm.get_graph(), self.node, task['node'])
+			self.dist_to_do = dist
+			self.reserved_paths[task['id']] = path
+			self.reserved_slots[task['id']] = [0]
 
 		# Move from node to node
-		self.current_path = path
-		self.current_slots = slots
-		self.dist_to_do = dist
 		self.dist_done = 0.0 
-		while len(self.current_path) > 0:
+		while not self.node == task['node']:
 
-			# Wait for node to be free
-			if self.params['routing'] == True:
-				node_arriving_time = self.current_slots[0][0]
+			# Set current path
+			self.current_path = self.reserved_paths[task['id']]
+
+			# Current node moving to
+			self.current_node = self.reserved_paths[task['id']][0]
+			self.current_slot = self.reserved_slots[task['id']][0]
+
+			# If routing agent
+			if self.ro_agent:
+
+				# Compute path towards task destination
+				if self.reserved_paths[task['id']][0] == self.node:
+					self.ro_agent.plan_executing_task(self.comm)
+
+				# Compute total distance to travel
+				self.dist_to_do = self.dist_done + sum([self.graph.edges[self.reserved_paths[task['id']][i], self.reserved_paths[task['id']][i + 1]].length for i in range(len(self.reserved_paths[task['id']]) - 1)])
+
+				# Wait for node to be free
+				node_arriving_time = self.current_slot[0]
 				if node_arriving_time > datetime.now():
-					print("Agv " + str(self.id) + ":        Waits " + str(td) + " seconds")
 					td = node_arriving_time - datetime.now()
 					time.sleep(td.total_seconds())
+					print("Agv " + str(self.id) + ":        Waits " + str(td) + " seconds")
+
+			# If no routing agent
+			else:
+				self.reserved_paths[task['id']] = self.reserved_paths[task['id']][1:]
 					
-			# Move to node if free
-			result = self.action.move_to_node(self.current_path[0])
+			# Move to node if free			
+			result = self.action.move_to_node(self.current_node)
 			if not result: return False
 
 		# Check if task is charging task
@@ -222,20 +230,13 @@ class AGV:
 
 		return True
 
-	def search_closest_node(self, loc):
-		node = min(self.graph.nodes.values(), key=lambda node: self.calculate_euclidean_distance(node.pos, loc))
-		return node.name
-
-	@staticmethod
-	def calculate_euclidean_distance(a, b):
-		return math.sqrt(math.pow(b[0] - a[0], 2) + math.pow(b[1] - a[1], 2))
-
 	def odom_callback(self):
 
 		# Open database connection
 		comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
 		comm.sql_open()
 
+		# Loop
 		while True:
 
 			# Update robot
@@ -248,39 +249,20 @@ class AGV:
 	def update_global_robot_list(self, comm):
 		robot_dict = {"id": self.id, "ip": self.ip, "port": self.port, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
 				"status": self.status, "battery_status": self.battery_status, "travelled_time": self.travelled_time, "charged_time": self.charged_time,
-				"congestions": self.congestions, "task_executing": self.task_executing['id'], "path": str(self.current_path), "total_path": str(self.total_path), "time_now": datetime.now().strftime('%H:%M:%S')}
+				"congestions": self.congestions, "task_executing": self.task_executing['id'], "moving_to": self.current_node, "path": str(self.current_path), "total_path": str(self.total_path), "time_now": datetime.now().strftime('%H:%M:%S')}
 		comm.sql_add_to_table('global_robot_list', robot_dict)
 		comm.sql_update_robot(self.id, robot_dict)
 
-	def signal_handler1(self, _, __):
+	def search_closest_node(self, loc):
+		graph = self.comm.get_graph()
+		node = min(graph.nodes.values(), key=lambda node: self.calculate_euclidean_distance(node.pos, loc))
+		return node.name
 
-		# Close threads
-		print("\nShutdown robot with communication possibilities")
-		self.exit_event.set()
-		time.sleep(1)
-		
-		# Open database connection
-		comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
-		comm.sql_open()
+	@staticmethod
+	def calculate_euclidean_distance(a, b):
+		return math.sqrt(math.pow(b[0] - a[0], 2) + math.pow(b[1] - a[1], 2))
 
-		# Delete robot from database
-		comm.sql_delete_from_table('global_robot_list', 'id', self.id)
-		
-		# Make all tasks unassigned
-		tasks = []
-		local_task_list = comm.sql_get_local_task_list(self.id) + [self.task_executing]
-		for task in local_task_list: 
-			if not task['message'] in ['homing', 'charging']:
-				tasks.append((-1, 'unassigned', '-', 0, "-", "-", "-", "-", "-", "-", 0, task['id']))
-			else:
-				tasks.append((-1, 'aborted', task['message'], 0, "-", "-", "-", "-", "-", "-", 0, task['id']))
-		if not len(tasks) == 0: comm.sql_update_tasks(tasks)
-
-		# Close connection
-		comm.sql_close()
-		exit(0)
-
-	def signal_handler2(self, _, __):
+	def signal_handler(self, _, __):
 
 		# Close threads
 		print("\nShutdown robot without communication possibilities")

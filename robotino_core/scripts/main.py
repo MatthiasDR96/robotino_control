@@ -10,8 +10,14 @@ if __name__== '__main__':
     # Get id from command line
     if len(sys.argv) > 1:
         id = int(sys.argv[1])
+        ta_agent = sys.argv[2] == 'True'
+        ro_agent = sys.argv[3] == 'True'
+        rm_agent = sys.argv[4] == 'True'
     else:
         id = 15
+        ta_agent = False
+        ro_agent = False
+        rm_agent = False
 
     # Get location
     depots = [(10, 30), (10, 50), (10, 70)]
@@ -23,4 +29,4 @@ if __name__== '__main__':
     #rospy.spin()
 
     # Start AGV
-    AGV('localhost', 10000+id, id, 'localhost', 'matthias', 'matthias', 'kb', loc)
+    AGV('localhost', 10000+id, id, 'localhost', 'matthias', 'matthias', 'kb', loc, ta_agent, ro_agent, rm_agent)

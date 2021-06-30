@@ -25,8 +25,6 @@ class Action:
         self.agv.node = node
         self.agv.x_loc = float(node_position[0])
         self.agv.y_loc = float(node_position[1])
-        self.agv.current_path = self.agv.current_path[1:]
-        self.agv.current_slots = self.agv.current_slots[1:]
         print("AGV " + str(self.agv.id) + ":        Moved to node " + node)
 
         return True

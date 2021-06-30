@@ -54,14 +54,9 @@ class TaskAllocation:
 
 				# Calculate progress
 				progress = (self.agv.dist_done / self.agv.dist_to_do) * 100 if not self.agv.dist_to_do == 0.0 else 0.0
-
-				# Calculate estimated end time and duration
-				distance_yet_to_do = self.agv.dist_to_do - self.agv.dist_done
-				self.agv.estimated_end_time = datetime.now() + timedelta(seconds=distance_yet_to_do / self.agv.params['robot_speed']) # TODO possible delays
-				self.agv.estimated_duration = self.agv.estimated_end_time - self.agv.start_time
 					
 				# Update executing task
-				task_dict = {'progress': progress, 'estimated_end_time': self.agv.estimated_end_time.strftime('%H:%M:%S'), 'estimated_duration': str(self.agv.estimated_duration)}
+				task_dict = {'progress': progress}
 				comm.sql_update_task(self.agv.task_executing['id'], task_dict)
 
 			# Close thread at close event 
@@ -225,20 +220,20 @@ class TaskAllocation:
 
 		# Compute task sequence
 		task_sequence, edges, _ = self.compute_task_sequence_and_cost(new_local_task_list, start_node)
-		
+
 		# Add new local task list
 		tasks = []
 		priority = 1
 		for task in task_sequence:
 
-			# Compute start, end and duration
+			# Compute estimated start, end and duration
 			task_index = task_sequence.index(task)
-			start_time = timedelta(seconds=sum(edges[0:task_index])) + datetime.now()
-			end_time = timedelta(seconds=sum(edges[0:task_index+1])) + datetime.now()
-			duration = end_time - start_time
+			estimated_start_time = timedelta(seconds=sum(edges[0:task_index])) + datetime.now()
+			estimated_end_time = timedelta(seconds=sum(edges[0:task_index+1])) + datetime.now()
+			estimated_duration = estimated_end_time - estimated_start_time
 
 			# Update task
-			tasks.append((self.agv.id, 'assigned', 'assign', priority, start_time.strftime('%H:%M:%S'), end_time.strftime('%H:%M:%S'), str(duration), '-', '-', '-', 0, task['id']))
+			tasks.append((self.agv.id, 'assigned', 'assign', priority, estimated_start_time.strftime('%H:%M:%S'), estimated_end_time.strftime('%H:%M:%S'), str(estimated_duration), '-', '-', '-', 0, task['id']))
 			priority += 1
 
 		return tasks

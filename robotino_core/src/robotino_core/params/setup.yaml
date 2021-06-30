@@ -1,4 +1,4 @@
-robot_speed: 10
+robot_speed: 5
 task_execution_time: 0
 collision_threshold: 0.5
 battery_threshold: 20
@@ -8,7 +8,7 @@ epsilon: 0.5
 initial_resources: 100
 
 routing: True
-dmas_rate: 5
+dmas_rate: 1
 local_consensus_rate: 5
 
 max_arrival_interval: 20
