@@ -4,6 +4,7 @@ import random
 from copy import copy
 
 from robotino_factory.solvers.astar_solver import *
+from yaml import nodes
 
 alpha = 1  # relative importance of pheromone (default=1)
 beta = 3  # relative importance of distance (default=3)
@@ -26,8 +27,8 @@ def tsp(graph, start_node, nodes_to_visit):
             - Node to visit names
         Output:
             - Shortest task sequence (without starting node)
-            - Shortest route containing all tasks
-            - Distance in meters
+            - Shortest route containing all tasks (without starting node)
+            - Distances between tasks in meters
         Default output:
             - [start]
             - [start]

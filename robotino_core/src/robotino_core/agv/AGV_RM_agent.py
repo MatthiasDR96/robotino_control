@@ -4,15 +4,19 @@ from robotino_core.Comm import Comm
 from robotino_core.solvers.genetic_algorithm_solver import *
 from robotino_core.solvers.tsp_solver import *
 
-class ResourceManagement:
+class RM_agent:
 	"""
 			A class containing the intelligence of the Resource Management agent
 	"""
 
 	def __init__(self, agv):
 
-		# agv
+		# AGV
 		self.agv = agv
+
+		# Init database communication
+		self.comm_main = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
+		self.comm_main.sql_open()
 
 		# Temporal optimization params
 		self.candidate_resource_percent = None
@@ -24,12 +28,8 @@ class ResourceManagement:
 
 	def main(self):
 
-		# Open database connection
-		print("   Resource agent:            Started")
-		comm = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
-		comm.sql_open()
-
 		# Loop
+		print("   Resource agent:            Started")
 		while True:
 
 			# Check charging status
@@ -45,7 +45,7 @@ class ResourceManagement:
 					# Create charging task
 					closest_charging_station = self.search_closest_charging_station(start_node)
 					task_dict = {"node": closest_charging_station, "priority": 0, "robot": self.agv.id, "message": 'charging', "status": 'assigned'}
-					comm.sql_add_to_table('global_task_list', task_dict)
+					self.comm_main.sql_add_to_table('global_task_list', task_dict)
 
 	def solve(self, task_sequence):
 

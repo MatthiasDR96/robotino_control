@@ -19,8 +19,12 @@ def find_shortest_path(graph, start_node, end_node):
             - None
     """
 
+    # Assertions
+    assert isinstance(start_node, str)
+    assert isinstance(end_node, str)
+
     # Tak deepcopy of graph
-    # graph = deepcopy(graph) # TODO commenting can cause problems
+    graph = deepcopy(graph)
 
     # Get nodes from node names
     start_node = graph.nodes[start_node]

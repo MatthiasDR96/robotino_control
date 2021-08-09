@@ -1,11 +1,7 @@
 import math
-
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-
-from robotino_core.EnvironmentalAgent import EnvironmentalAgent
-
 
 class Graph:
 
@@ -47,17 +43,6 @@ class Graph:
     def reset_edge_pheromone(self, level=0.01):
         for edge in self.__edges.values():
             edge.pheromone = level
-
-    def evaporate(self):
-        for node in self.__nodes.values():
-            node.segment.evaporate()
-        for edge in self.__edges.values():
-            for segment in edge.segments:
-                segment.evaporate()
-
-    def remove_reservations(self, agv_id):
-        for node in self.__nodes.values():
-            node.environmental_agent.remove_reservations(agv_id)
 
     def print_nodes(self):
         print("\nGraph nodes:")
@@ -109,38 +94,16 @@ class Graph:
     def __euclidean_distance(a, b):
         return round(math.sqrt(pow(a[1] - b[1], 2) + pow(a[0] - b[0], 2)), 4)
 
-    def plot_schedules(self):
-
-        # Count not empty node schedules
-        count_n = 0
-        for node in self.nodes.values():
-            if not len(node.environmental_agent.reservations) == 0:
-                count_n += 1
-
-        if not count_n == 0:
-            # Plot schedules
-            fig, axes = plt.subplots(nrows=round(math.sqrt(count_n)) + 1,
-                                     ncols=round(count_n / round(math.sqrt(count_n))),
-                                     gridspec_kw={'hspace': 1.5, 'wspace': 0.5})
-            axes = axes.ravel()
-            i = 0
-            for node in self.nodes.values():
-                if not len(node.environmental_agent.reservations) == 0:
-                    node.environmental_agent.plot(axes[i])
-                    i += 1
-        plt.show()
-
 
 class Node:
 
     def __init__(self, node_location, node_name):
+
+        # General
         self.pos = node_location
         self.name = node_name
         self.edges = []
         self.neighbors = []
-
-        # For dmas
-        self.environmental_agent = EnvironmentalAgent(node_name.split('_')[-1])
 
         # For astar
         self.g = 0

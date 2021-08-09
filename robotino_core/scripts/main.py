@@ -15,8 +15,8 @@ if __name__== '__main__':
         rm_agent = sys.argv[4] == 'True'
     else:
         id = 15
-        ta_agent = False
-        ro_agent = False
+        ta_agent = True
+        ro_agent = True
         rm_agent = False
 
     # Get location

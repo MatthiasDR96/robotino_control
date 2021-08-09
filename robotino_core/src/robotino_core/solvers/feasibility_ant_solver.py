@@ -8,8 +8,8 @@ beta = 3  # relative importance of distance (default=3)
 rho = 0.8  # percent evaporation of pheromone (0..1, default=0.8)
 q = 1  # total pheromone deposited by each :class:`Ant` after each iteration is complete (>0, default=1)
 t0 = 0.01  # initial pheromone level along each :class:`Edge` of the :class:`World` (>0, default=0.01)
-iterations = 100  # number of iterations to perform (default=100)
-ant_count = 1  # how many :class:`Ant`\s will be used (default=10)
+iterations = 50  # number of iterations to perform (default=100)
+ant_count = 10  # how many :class:`Ant`\s will be used (default=10)
 elite = 0.5  # multiplier of the pheromone deposited by the elite :class:`Ant` (default=0.5)
 
 
@@ -39,7 +39,6 @@ def feasibility_ant_solve(graph, start_node, nodes_to_visit):
     if len(nodes_to_visit) == 0:
         global_best_solution = [start_node]
         local_best_solutions = [start_node]
-        route_cost = 0
 
     else:
 
@@ -55,7 +54,7 @@ def feasibility_ant_solve(graph, start_node, nodes_to_visit):
         colony = create_colony(graph, start_node, nodes_to_visit)
 
         # Loop through iterations
-        for i in range(iterations):
+        for _ in range(iterations):
 
             # Perform one aco-optimization
             local_best = aco(colony)

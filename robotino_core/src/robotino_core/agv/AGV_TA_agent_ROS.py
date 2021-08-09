@@ -1,9 +1,10 @@
-from robotino_core.solvers.tsp_solver import tsp
 import pickle
-from robotino_core.Comm import Comm
 import rospy
 
-class TaskAllocation:
+from robotino_core.Comm import Comm
+from robotino_core.solvers.tsp_solver import tsp
+
+class TA_agent:
 	"""
 			A class containing the intelligence of the Task Allocation agent. This agent takes care of
 			including new announced tasks into the robots task list
@@ -11,7 +12,7 @@ class TaskAllocation:
 
 	def __init__(self, agv):
 
-		# Bind to agv class
+		# AGV
 		self.agv = agv
 
 		# Init node

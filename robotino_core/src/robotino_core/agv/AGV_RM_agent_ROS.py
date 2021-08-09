@@ -4,7 +4,7 @@ from robotino_core.Comm import Comm
 from robotino_core.solvers.genetic_algorithm_solver import *
 from robotino_core.solvers.tsp_solver import *
 
-class ResourceManagement:
+class RM_agent:
 	"""
 			A class containing the intelligence of the Resource Management agent
 	"""

@@ -1,12 +1,11 @@
+from datetime import datetime, timedelta
 import time
-from datetime import date, datetime, timedelta
+import numpy as np
 
 from robotino_core.solvers.feasibility_ant_solver import *
 from robotino_core.Comm import Comm
 
-import numpy as np
-
-class Routing:
+class RO_agent:
 	"""
 			A class containing the intelligence of the Routing agent
 	"""
@@ -16,34 +15,59 @@ class Routing:
 		# AGV
 		self.agv = agv
 
-		# Last recorded reservations
-		self.last_reservations = []
+		# Init database communication
+		self.comm_main = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
+		self.comm_main.sql_open()
+		self.comm_homing = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
+		self.comm_homing.sql_open()
 
-	def main(self):
-
-		# Open database connection
-		print("   Routing agent:             Started")
-		comm = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
-		comm.sql_open()
+	def main(self, _, stop):
 		
 		# Loop
+		print("RO-agent:	Main thread started")
 		while True:
 
 			# Timeout
-			time.sleep(self.agv.params['dmas_rate'])
+			time.sleep(0.1) # self.agv.params['dmas_rate'])
 
 			# Plan if there are tasks
 			if not self.agv.task_executing['id'] == -1:
 
 				# Plan path and slots towards executing task
-				self.plan_executing_task(comm)
+				self.plan_executing_task(self.comm_main)
 
 				# Plan path and slots towards local tasks
-				self.plan_local_tasks(comm)
+				self.plan_local_tasks(self.comm_main)
 
 			# Close thread at close event 
-			if self.agv.exit_event.is_set():
+			if stop():
+				print("RO-agent:	Main thread killed")
 				break
+
+	def homing(self, _, stop):
+
+		# Loop
+		print("RO-agent:	Homing thread started")
+		while True:
+
+			# Get tasks in local task list
+			local_task_list = self.comm_homing.sql_get_local_task_list(self.agv.id)
+
+			# If database alive
+			if not local_task_list is None:
+
+				# Add homing task if all work is done
+				if len(local_task_list) == 0 and self.agv.task_executing['id'] == -1 and not self.agv.node == self.agv.depot:
+
+					# Add task to task list
+					task_dict = {"node": self.agv.depot, "priority": 1, "robot": self.agv.id, "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'homing', "status": 'assigned', "approach": '-'}
+					self.comm_homing.sql_add_to_table('global_task_list', task_dict)
+
+			# Close thread at close event 
+			if stop():
+				print("RO-agent:	Homing thread killed")
+				break
+
 
 	def plan_executing_task(self, comm):
 
@@ -60,10 +84,6 @@ class Routing:
 			# Do dmas
 			best_path, best_slots = self.dmas(start_node, node_to_visit, estimated_start_time, comm)
 
-			# Estimated end time and duration
-			estimated_end_time = best_slots[-1][0] + best_slots[-1][1]
-			estimated_duration = estimated_end_time - self.agv.start_time
-
 			# Reserve slots
 			self.intent(best_path, best_slots, comm)
 
@@ -71,47 +91,30 @@ class Routing:
 			self.agv.reserved_paths[self.agv.task_executing['id']] = best_path
 			self.agv.reserved_slots[self.agv.task_executing['id']] = best_slots
 
-			# Set paths towards all tasks
-			self.agv.estimated_end_time = estimated_end_time
-
 		else:
-
-			# Estimated end time and duration
-			time_to_do = timedelta(seconds=self.agv.calculate_euclidean_distance((self.agv.x_loc, self.agv.y_loc), self.agv.graph.nodes[self.agv.current_node].pos) / self.agv.params['robot_speed'])
-			estimated_end_time = datetime.now() + time_to_do
-			estimated_duration = estimated_end_time - self.agv.start_time
 
 			# Set paths towards all tasks
 			self.agv.reserved_paths[self.agv.task_executing['id']] = []
-			self.agv.reserved_slots[self.agv.task_executing['id']] = []
-
-		# Update executing task
-		task_dict = {'estimated_end_time': estimated_end_time.strftime('%H:%M:%S'), 'estimated_duration': str(estimated_duration)}
-		comm.sql_update_task(self.agv.task_executing['id'], task_dict)
+			self.agv.reserved_slots[self.agv.task_executing['id']] = [(timedelta(), estimated_start_time)]
 
 	def plan_local_tasks(self, comm):
 
 		# Init
 		start_node = self.agv.task_executing['node']
-		estimated_start_time = self.agv.estimated_end_time
+		estimated_start_time = self.agv.reserved_slots[self.agv.task_executing['id']][-1][0] + self.agv.reserved_slots[self.agv.task_executing['id']][-1][1]
 
 		# Get tasks in local task list
 		local_task_list = comm.sql_get_local_task_list(self.agv.id)
 
-		# Nodes to visit
-		nodes_to_visit = local_task_list if not local_task_list is None else []
-
 		# Update paths for each task in local task list
 		self.agv.total_path = []
-		updated_tasks = []
-		for task in nodes_to_visit:
+		for task in local_task_list:
 
 			# Do dmas
 			best_path, best_slots = self.dmas(start_node, [task['node']], estimated_start_time, comm)
 
 			# Estimated end time and duration
 			estimated_end_time = best_slots[-1][0] + best_slots[-1][1]
-			estimated_duration = estimated_end_time - estimated_start_time
 
 			# Reserve slots
 			self.intent(best_path, best_slots, comm)
@@ -122,18 +125,12 @@ class Routing:
 
 			# Set paths towards all tasks
 			self.agv.total_path.extend(best_path)
-
-			# Update task
-			updated_tasks.append((self.agv.id, task['status'], task['message'], task['priority'], estimated_start_time.strftime('%H:%M:%S'), estimated_end_time.strftime('%H:%M:%S'), str(estimated_duration), '-', '-', '-', 0, task['id']))
-						
+			
 			# Estimated start time for next task
 			estimated_start_time = estimated_end_time
 
 			# Start node for next task is end node of previous task
 			start_node = task['node']
-
-		# Update tasks
-		comm.sql_update_tasks(updated_tasks)
 
 	def dmas(self, start_node, nodes_to_visit, start_time, comm):
 
@@ -222,28 +219,6 @@ class Routing:
 		for i in range(len(path)):
 			self.reserve_slot(path[i], slots[i], comm)
 			
-	def homing(self):
-
-		# Open database connection
-		comm = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
-		comm.sql_open()
-
-		# Loop
-		while True:
-
-			# Get tasks in local task list
-			local_task_list = comm.sql_get_local_task_list(self.agv.id)
-
-			# If database alive
-			if not local_task_list is None:
-
-				# Add homing task if all work is done
-				if len(local_task_list) == 0 and self.agv.task_executing['id'] == -1 and not self.agv.node == self.agv.depot:
-
-					# Add task to task list
-					task_dict = {"node": self.agv.depot, "priority": 1, "robot": self.agv.id, "message": 'homing', "status": 'assigned', 'estimated_start_time': datetime.now().strftime('%H:%M:%S')}
-					comm.sql_add_to_table('global_task_list', task_dict)
-
 	def check_slot(self, node, slot, comm):
 
 		# Assertions
@@ -276,10 +251,6 @@ class Routing:
 		# Get all reservations
 		time.sleep(0.1)
 		reservations = comm.sql_select_from_table('environmental_agents', 'node', node)
-		#if reservations is None:
-			#reservations = self.last_reservations
-		#else: 
-			#self.last_reservations = reservations
 
 		# Get all reservations from the requested reservation_time for all other robots
 		slots = []
