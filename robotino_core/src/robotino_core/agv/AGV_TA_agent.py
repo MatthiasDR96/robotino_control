@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from os import kill
 import time
 import pickle
 import socket
@@ -77,7 +78,7 @@ class TA_agent:
 
 				# Send all announcement messages and receive all bids
 				self.p = Pool(processes=max(1, len(combinations)))
-				bids = self.p.starmap(tcp_client, combinations)
+				bids = self.p.starmap(self.tcp_client, combinations)
 				bids = [bid for bid in bids if bid]
 
 				# If there are valid bids
@@ -104,22 +105,28 @@ class TA_agent:
 						robot = best_bid_dict['robot']
 						best_bid_dict['task']['message'] = 'assign'
 						best_bid_dict['task']['robot'] = robot['id']
-						tcp_client(robot['ip'], robot['port'], best_bid_dict['task'])
+						self.tcp_client(robot['ip'], robot['port'], best_bid_dict['task'])
 
 			# Close thread at close event 
 			if stop():
-				print("TA-agent:	local consensus thread killed")
+				print("TA-agent:	Local consensus thread killed")
 				break
 
 	def get_tasks_to_assign(self, comm):
-		items = comm.sql_select_from_table('global_task_list', 'status', "unassigned")
-		items_ = [item for item in items if item['approach'] == 'decentral']
-		return items_ if not items_ is None else []
+		items = comm.sql_select_from_table('global_task_list', {'status': "unassigned"})
+		if items is not None:
+			items_ = [item for item in items if item['approach'] == 'decentral']
+		else:
+			items_ = []
+		return items_
 
 	def get_all_robots_exept_this(self, comm):
 		items = comm.sql_select_everything_from_table('global_robot_list')
-		items_ = [robot for robot in items if robot['id'] != self.agv.id] if items is not None else []
-		return items_ if not items_ is None else []
+		if items is not None:
+			items_ = [robot for robot in items if robot['id'] != self.agv.id]
+		else:
+			items_ = []
+		return items_ 
 
 	def resolution_lb(self, bids):
 		bids.sort(key=lambda p: self.agv.params['epsilon'] * p['values'][0] + (1 - self.agv.params['epsilon']) * p['values'][1])
@@ -132,9 +139,12 @@ class TA_agent:
 		comm = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
 		comm.sql_open()
 
+		# Try
+		#try:
+
 		# Receive message
-		data = conn.recv(1024)
-						
+		data = conn.recv(2024)
+							
 		# Convert data to dictionary
 		task = pickle.loads(data)
 		print('\nAGV ' + str(self.agv.id) +'         Received task: ' + str(task['id']))
@@ -170,10 +180,15 @@ class TA_agent:
 			if result:
 				conn.sendall(pickle.dumps('task_accepted'))
 				print("Agv " + str(self.agv.id) + ":        Added task " + str(task['id']) + " to local task list")
-
-		# Close connection
-		conn.close()
-		comm.sql_close()
+			else:
+				conn.sendall(pickle.dumps('ERROR'))
+				print("Agv " + str(self.agv.id) + ":        Could not add task to local task list")
+		
+		#except:
+			#conn.sendall(pickle.dumps('ERROR'))
+		#finally:
+			conn.close()
+			comm.sql_close()
 
 	def compute_bid(self, local_task_list, task, comm, substract):
 
@@ -221,10 +236,12 @@ class TA_agent:
 		# Consider resource management
 		charging_time = 0.0
 		if self.agv.rm_agent:
-			charging_station, insertion_index, charging_time, _ = self.agv.resource_management.solve(task_sequence)
-			if insertion_index is not None:
-				task_dict = {"node": charging_station, "robot": self.agv.id, "message": 'charging', "status": 'assigned'}
-				task_sequence.insert(insertion_index, task_dict)
+			_, _, charging_time, _ = self.agv.resource_management.solve(task_sequence)
+			
+			# TODO this must not be added here => only cost calculation
+			# #if insertion_index is not None:
+				#task_dict = {"node": charging_station, "robot": self.agv.id, "message": 'charging', "status": 'assigned'}
+				#task_sequence.insert(insertion_index, task_dict)
 
 		# Evaluate task sequence
 		travel_times = self.agv.evaluate_local_task_list(task_sequence, comm)
@@ -290,38 +307,41 @@ class TA_agent:
 		tasks = []
 		priority = 1
 		for task in task_sequence:
-			tasks.append((priority, self.agv.id, '-', '-', '-', '-', '-', '-', 0.0, 'assign', 'assigned', task['approach'], task['id']))
+			tasks.append((priority, self.agv.id, '-', '-', '-', '-', '-', '-', 0.0, 'assign', 'assigned', task['approach'], str(task['task_bids']), task['id']))
 			priority += 1
 
 		return tasks
 
 
-def tcp_client(ip, port, data):
+	def tcp_client(self, ip, port, data):
 
-	try:
+		try:
 
-		# Create a TCP/IP socket
-		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		sock.settimeout(5)
+			# Create a TCP/IP socket
+			with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+				sock.settimeout(10)
 
-		# Make message
-		pickled_data = pickle.dumps(data)
+				# Make message
+				print(data)
+				pickled_data = pickle.dumps(data)
 
-		# Connect the socket to the port where the server is listening
-		print("Central auctioneer:		Announces task " + str(data['id']) + " to AGV " + str(port) + ' at ' + str(datetime.now().time()))
-		sock.connect((ip, port))
-						
-		# Send data
-		sock.sendall(pickled_data)
+				# Connect the socket to the port where the server is listening
+				print("AGV " + str(self.agv.id) + ":		Announces task " + str(data['id']) + " to AGV " + str(port) + ' at ' + str(datetime.now().time()))
+				sock.connect((ip, port))
+								
+				# Send data
+				sock.sendall(pickled_data)
 
-		# Look for the response
-		rec_data = sock.recv(1024)
-		rec_data_loaded = pickle.loads(rec_data)
-		if not isinstance(rec_data_loaded, str):
-			print("Central auctioneer:		Received " + str(rec_data_loaded['values'][:2]) + " from AGV " + str(rec_data_loaded['robot']['id']) + ' on task ' + str(rec_data_loaded['task']['id']) + ' at ' + str(datetime.now().time()))
-		return rec_data_loaded
+				# Look for the response
+				rec_data = sock.recv(2024)
+				rec_data_loaded = pickle.loads(rec_data)
+				if not isinstance(rec_data_loaded, str):
+					print("AGV " + str(self.agv.id) + ":		Received " + str(rec_data_loaded['values'][:2]) + " from AGV " + str(rec_data_loaded['robot']['id']) + ' on task ' + str(rec_data_loaded['task']['id']) + ' at ' + str(datetime.now().time()))
+				else:
+					print("Central auctioneer:		Received " + rec_data_loaded)
+				return rec_data_loaded
 
-	except:
-		return None
-	finally:
-		sock.close()	
+		except:
+			print("Central auctioneer:		Received nothing")
+			print("Return None")
+			return None	

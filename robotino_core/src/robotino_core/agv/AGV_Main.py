@@ -5,6 +5,7 @@ import os
 import time
 import math
 import signal
+import csv
 
 from robotino_core.Comm import Comm
 from robotino_core.agv.AGV_Action import Action
@@ -34,7 +35,7 @@ class AGV:
 		data_path = os.path.join(this_dir, "params", "setup.yaml")
 		with open(data_path, 'r') as file:
 			self.params = yaml.load(file, Loader=yaml.FullLoader)
-
+		
 		# Init database communication
 		self.comm_main = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
 		self.comm_main.sql_open()
@@ -58,6 +59,7 @@ class AGV:
 
 		# History attributes - work done
 		self.start_time = datetime.now()
+		self.sql_queries = 0
 		self.traveled_cost = 0.0
 		self.charged_time = 0.0
 		self.congestions = 0
@@ -65,7 +67,7 @@ class AGV:
 
 		# Future attributes - work to be done
 		self.local_task_list_estimated_cost = 0.0
-		self.local_task_list_estimated_end_time = 0.0
+		self.local_task_list_estimated_end_time = datetime(2000, 1, 1, 0, 0, 0)
 
 		# Routing attributes
 		self.reserved_paths = {} # All planned paths for tasks in local task list
@@ -73,6 +75,7 @@ class AGV:
 		self.total_path = [] # Total planned path for tasks in local task list
 
 		# Current executing task attributes
+		self.first_task_done = False
 		self.task_executing = {'id': -1, 'node': None, 'message': '-'}
 		self.task_executing_estimated_cost = 0.0
 		self.task_executing_start_time = datetime.now() # Start time of executing task
@@ -89,29 +92,33 @@ class AGV:
 		# Exit procedure
 		signal.signal(signal.SIGINT, self.signal_handler)
 		self.stop_threads = False
-
+		
+		# Create logger table
+		self.comm_main.sql_drop_table('robot' + str(self.id))
+		self.comm_main.sql_create_robot_table('robot' + str(self.id))
+		
 		# Main AGV agent processes
 		threads = []
 		threads.append(threading.Thread(target=self.main, args=(1, lambda: self.stop_threads)))
 		threads.append(threading.Thread(target=self.odom_callback, args=(2, lambda: self.stop_threads)))
 		threads.append(threading.Thread(target=self.cost_estimator, args=(3, lambda: self.stop_threads)))
-
+		
 		# Task allocation agent processes
 		if ta_agent:
 			self.ta_agent = TA_agent(self)
-			threads.append(threading.Thread(target=self.ta_agent.main, args=(4, lambda: self.stop_threads)))
-			threads.append(threading.Thread(target=self.ta_agent.local_consensus, args=(5, lambda: self.stop_threads)))
+			threads.append(threading.Thread(target=self.ta_agent.main, args=(5, lambda: self.stop_threads)))
+			threads.append(threading.Thread(target=self.ta_agent.local_consensus, args=(6, lambda: self.stop_threads)))
 
 		# Routing agent processes
 		if ro_agent:
 			self.ro_agent = RO_agent(self)
-			threads.append(threading.Thread(target=self.ro_agent.main, args=(6, lambda: self.stop_threads)))
-			threads.append(threading.Thread(target=self.ro_agent.homing, args=(7, lambda: self.stop_threads)))
+			threads.append(threading.Thread(target=self.ro_agent.main, args=(7, lambda: self.stop_threads)))
+			threads.append(threading.Thread(target=self.ro_agent.homing, args=(8, lambda: self.stop_threads)))
 
 		# Resource management agent processes
 		if rm_agent:
 			self.rm_agent = RM_agent(self)
-			threads.append(threading.Thread(target=self.rm_agent.main, args=(8, lambda: self.stop_threads)))
+			threads.append(threading.Thread(target=self.rm_agent.main, args=(9, lambda: self.stop_threads)))
 		
 		# Start processes
 		for thread in threads:
@@ -133,6 +140,11 @@ class AGV:
 
 			# Execute task if exist
 			if not self.task_executing['id'] == -1:
+
+				# Save starting time of tasks
+				if not self.first_task_done:
+					self.start_time = datetime.now()
+					self.first_task_done = True
 				
 				# Start task
 				print("\nAgv " + str(self.id) + ":        Start executing task " + str(self.task_executing['id']))
@@ -144,7 +156,7 @@ class AGV:
 				self.comm_main.sql_update_task(self.task_executing['id'], task_dict)
 
 				# Move to task
-				result = self.execute_task(self.task_executing)
+				result = self.execute_task(self.task_executing, self.stop_threads)
 
 				# If task reached
 				if result:
@@ -155,7 +167,7 @@ class AGV:
 					# Task executed
 					end_time = datetime.now()
 					duration = (end_time - self.task_executing_start_time).total_seconds()
-					task_dict = {'status': 'done', 'real_end_time': end_time.strftime('%H:%M:%S'), 'real_duration': str(duration)}
+					task_dict = {'status': 'done', 'progress': 100, 'real_end_time': end_time.strftime('%H:%M:%S'), 'real_duration': str(duration)}
 					self.comm_main.sql_update_task(self.task_executing['id'], task_dict)
 					print("Agv " + str(self.id) + ":        Finished task " + str(self.task_executing['id']))
 					self.task_executing = {'id': -1, 'node': None}
@@ -177,9 +189,9 @@ class AGV:
 				print("AGV-agent:	Main thread killed")
 				break
 
-	def execute_task(self, task):
+	def execute_task(self, task, stop):
 
-		# Compute path towards task destination
+		# Compute path towards task destination if ro_agent hasn't already
 		if self.ro_agent:
 			if not task['id'] in self.reserved_paths.keys(): self.ro_agent.plan_executing_task(self.comm_main)
 		else:
@@ -189,6 +201,10 @@ class AGV:
 
 		# Move from node to node until end node reached
 		while not self.node == task['node']:
+
+			# Compute path towards task destination if ro_agent hasn't already
+			if self.reserved_paths[task['id']][0] == self.node:
+				self.ro_agent.plan_executing_task(self.comm_main)
 
 			# Set current path and current node moving to
 			self.current_path = self.reserved_paths[task['id']]
@@ -208,6 +224,11 @@ class AGV:
 			# Move to node if free		
 			result = self.action.move_to_node(self.current_node)
 			if not result: return False
+
+			# Close thread at close event 
+			if stop:
+				print("AGV-agent:	Task execution killed")
+				break
 
 		# Check if task is charging task
 		if task['message'] == 'charging':
@@ -231,15 +252,30 @@ class AGV:
 		print("AGV-agent:	Odom thread started")
 		while True:
 
+			# Calculate sql queries
+			self.sql_queries = self.comm_main.sql_queries + self.comm_odom_callback.sql_queries + self.comm_cost_estimator.sql_queries
+			if self.ta_agent: self.sql_queries += self.ta_agent.comm_local_consensus.sql_queries 
+			if self.ro_agent: self.sql_queries += self.ro_agent.comm_main.sql_queries + self.ro_agent.comm_homing.sql_queries
+			if self.rm_agent: self.sql_queries += self.rm_agent.comm_main.sql_queries
+
 			# Make robot dict
 			robot_dict = {"id": self.id, "ip": self.ip, "port": self.port, "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
-				"status": self.status, "battery_status": self.battery_status, "traveled_cost": self.traveled_cost, "charged_time": self.charged_time,
+				"status": self.status, "battery_status": self.battery_status, "sql_queries": self.sql_queries, "traveled_cost": self.traveled_cost, "charged_time": self.charged_time,
 				"congestions": self.congestions, "task_executing": self.task_executing['id'], "moving_to": self.current_node, "path": str(self.current_path), "total_path": str(self.total_path), "time_now": datetime.now().strftime('%H:%M:%S'),
-				"executing_task_cost": self.task_executing_estimated_cost, "local_task_list_cost": self.local_task_list_estimated_cost, "local_task_list_end_time": self.local_task_list_estimated_end_time}
+				"executing_task_cost": self.task_executing_estimated_cost, "local_task_list_cost": self.local_task_list_estimated_cost, "local_task_list_end_time": self.local_task_list_estimated_end_time.strftime('%H:%M:%S')}
 
 			# Update robot
 			self.comm_odom_callback.sql_add_to_table('global_robot_list', robot_dict)
 			self.comm_odom_callback.sql_update_robot(self.id, robot_dict)
+
+			# Make robot dict
+			robot_dict = {"x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "node": self.node,
+				"status": self.status, "battery_status": self.battery_status, "sql_queries": self.sql_queries, "traveled_cost": self.traveled_cost, "charged_time": self.charged_time,
+				"congestions": self.congestions, "task_executing": self.task_executing['id'], "moving_to": self.current_node, "path": str(self.current_path), "total_path": str(self.total_path), "time_now": datetime.now().strftime('%H:%M:%S'),
+				"executing_task_cost": self.task_executing_estimated_cost, "local_task_list_cost": self.local_task_list_estimated_cost, "local_task_list_end_time": self.local_task_list_estimated_end_time.strftime('%H:%M:%S')}
+
+			# Log data
+			self.comm_odom_callback.sql_add_to_table('robot' + str(self.id), robot_dict)
 
 			# Close thread at close event 
 			if stop():
@@ -276,7 +312,6 @@ class AGV:
 
 						# Calculate progress
 						estimated_cost = (self.task_executing_estimated_end_time - self.task_executing_start_time).total_seconds()
-						
 						progress = round(((estimated_cost - dist_to_be_done) / estimated_cost) * 100 if not estimated_cost == 0.0 else 0.0)
 
 						# Update executing task
@@ -293,9 +328,11 @@ class AGV:
 							duration = (end_time - start_time).total_seconds()
 
 							# Update task
-							task_dict = {'estimated_start_time': self.task_executing_start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(duration)}
+							task_dict = {'estimated_start_time': start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(duration)}
 							self.comm_cost_estimator.sql_update_task(task['id'], task_dict)
 							local_task_cost += duration
+
+						# Evaluate homing
 
 					else:
 
@@ -334,7 +371,7 @@ class AGV:
 							duration = cost_to_task.total_seconds()
 
 							# Update task
-							task_dict = {'estimated_start_time': self.task_executing_start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(duration)}
+							task_dict = {'estimated_start_time': start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(duration)}
 							self.comm_cost_estimator.sql_update_task(task['id'], task_dict)
 							local_task_cost += duration
 
@@ -342,12 +379,16 @@ class AGV:
 							start_time = end_time
 							start_node = task['node']
 
+						# Evaluate homing
+
 					# Update
 					self.local_task_list_estimated_cost = local_task_cost
 					self.local_task_list_estimated_end_time = end_time
 
+				else:
+					self.task_executing_estimated_cost = 0.0				
+
 			except:
-				print("Error")
 				continue
 
 			# Close thread at close event 
@@ -358,9 +399,7 @@ class AGV:
 	def evaluate_local_task_list(self, task_sequence, comm):
 
 		# Start situation
-		dist = self.calculate_euclidean_distance((self.x_loc, self.y_loc), self.graph.nodes[self.current_node].pos)
-		dist += find_shortest_path(self.graph, self.current_node, self.task_executing['node'])[1] if not self.task_executing['id'] == -1 else 0.0
-		start_time = datetime.now() + timedelta(seconds=dist/self.params['robot_speed'])
+		start_time = self.task_executing_estimated_end_time if not self.task_executing['id'] == -1 else datetime.now()
 		start_node = self.task_executing['node'] if not self.task_executing['id'] == -1 else self.node
 
 		# Loop
@@ -373,7 +412,7 @@ class AGV:
 				# Do dmas
 				_, best_slots = self.ro_agent.dmas(start_node, [task['node']], start_time, comm)
 
-				# Estimated end time
+				# Estimated end time, charging cost is included in slots
 				end_time = best_slots[-1][0] + best_slots[-1][1]
 				
 				# Compute cost
@@ -394,6 +433,10 @@ class AGV:
 
 				# Compute cost
 				cost = timedelta(seconds=dist/self.params['robot_speed'])
+
+				# Add charging cost
+				if self.rm_agent:
+					cost += task['charging_time']
 				travel_times.append(float(cost.total_seconds()))
 
 				# Estimated end time and duration
@@ -419,4 +462,7 @@ class AGV:
 		print("\n\nShutdown robot without communication possibilities")
 		self.stop_threads = True
 		time.sleep(1)
+		comm = Comm(self.ip, self.port, self.host, self.user, self.password, self.database)
+		comm.sql_open()
+		comm.sql_drop_table('robot' + str(self.id))
 		exit(0)

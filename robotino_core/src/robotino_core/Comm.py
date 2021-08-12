@@ -23,7 +23,6 @@ class Comm:
 
 		# Communication monitoring
 		self.sql_queries = 0
-		self.tcp_messages = 0
 
 	def sql_open(self):
 		try:
@@ -40,7 +39,7 @@ class Comm:
 
 	def sql_close(self):
 		self.cursor.close()
-		self.conn.close() 
+		self.conn.close()			
 
 	def sql_create_database(self, table):
 		assert isinstance(table, str)
@@ -58,9 +57,9 @@ class Comm:
 		sql = "DROP TABLE IF EXISTS {}".format(table)
 		self.cursor.execute(sql)
 
-	def sql_create_robot_table(self):
+	def sql_create_robot_table(self, name):
 		sql = """
-		CREATE TABLE IF NOT EXISTS global_robot_list(
+		CREATE TABLE IF NOT EXISTS {}(
 				id INT UNIQUE,
 				ip VARCHAR(100),
 				port INT,
@@ -70,7 +69,8 @@ class Comm:
 				node VARCHAR(100),
 				status VARCHAR(100),
 				battery_status FLOAT,
-				travelled_time FLOAT,
+				sql_queries INT,
+				traveled_cost FLOAT,
 				charged_time FLOAT,
 				congestions INT,
 				task_executing INT,
@@ -78,13 +78,14 @@ class Comm:
 				path VARCHAR(100),
 				total_path VARCHAR(100),
 				time_now VARCHAR(100),
+				executing_task_cost FLOAT,
 				local_task_list_cost FLOAT,
-				local_task_list_end_time FLOAT
+				local_task_list_end_time  VARCHAR(100)
 		)
-		"""
+		""".format(name)
 		self.cursor.execute(sql)
 		self.conn.commit()
-		
+
 	def sql_create_task_table(self):
 		sql = """
 		CREATE TABLE IF NOT EXISTS global_task_list(
@@ -107,6 +108,33 @@ class Comm:
 		self.cursor.execute(sql)
 		self.conn.commit()
 
+	def sql_create_graph_table(self):
+		sql = """
+		CREATE TABLE IF NOT EXISTS graph(
+				id INT AUTO_INCREMENT PRIMARY KEY,
+				name VARCHAR(100),
+				x_loc FLOAT,
+				y_loc FLOAT,
+				neighbors VARCHAR(100)
+		)
+		"""
+		self.cursor.execute(sql)
+		self.conn.commit()
+
+	def sql_create_environmental_agents_table(self):
+		sql = """
+		CREATE TABLE IF NOT EXISTS environmental_agents(
+				id INT AUTO_INCREMENT PRIMARY KEY,
+				node VARCHAR(100),
+				robot INT,
+				start_time VARCHAR(100),
+				end_time VARCHAR(100),
+				pheromone FLOAT
+		)
+		"""
+		self.cursor.execute(sql)
+		self.conn.commit()
+
 	def sql_show_table(self, table):
 		assert isinstance(table, str)
 		sql = "DESCRIBE {}".format(table)
@@ -122,29 +150,42 @@ class Comm:
 		values = ', '.join(["%s"]*len(item.values()))
 		sql = 'INSERT IGNORE INTO {} ({fields}) VALUES ({values})'.format(table, fields=fields, values=values)
 		val = tuple(item.values())
-		#try:
-		self.cursor.execute(sql, val)
-		self.conn.commit()
-		self.sql_queries += 1
-		return self.cursor.lastrowid
-		#except:
-		print("Database not alive")
-		return None
+		try:
+			self.cursor.execute(sql, val)
+			self.conn.commit()
+			return self.cursor.lastrowid
+		except:
+			print("Database not alive")
+			return None
+
+	def sql_select_reservations(self, table, node, id):
+		assert isinstance(table, str)
+		assert isinstance(node, str)
+		assert isinstance(id, int)
+		sql = "SELECT * FROM {} WHERE NOT robot = %s AND node = %s".format(table) + " ORDER BY id"
+		val = (id, node)
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql, val)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive")	
+			return None
 
 	def sql_select_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
 		assert isinstance(criterium, str)
 		sql = "SELECT * FROM {} WHERE {} = %s".format(table, criterium) + " ORDER BY id"
 		val = (value,)
-		#try:
-		self.conn.reconnect()
-		self.cursor.execute(sql, val)
-		result = self.cursor.fetchall()
-		self.sql_queries += 1
-		return result
-		#except:
-			#print("Database not alive")	
-			#return None
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql, val)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive")	
+			return None
 		
 	def sql_select_everything_from_table(self, table):
 		assert isinstance(table, str)
@@ -153,11 +194,10 @@ class Comm:
 			self.conn.reconnect()
 			self.cursor.execute(sql)
 			result = self.cursor.fetchall()
-			self.sql_queries += 1
 			return result
 		except:
-			print("Database not alive")	
-		return None
+			print("Database not alive " + str(table))	
+			return None
 
 	def get_graph(self):
 		items = self.sql_select_everything_from_table('graph')
@@ -167,19 +207,16 @@ class Comm:
 		node_neighbors = [ast.literal_eval(x) for x in list(map(itemgetter('neighbors'), items))]
 		graph.create_nodes(node_locations, node_names)
 		graph.create_edges(node_names, node_neighbors)
-		self.sql_queries += 1
 		return graph
 
 	def sql_delete_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
 		assert isinstance(criterium, str)
-		assert isinstance(value, int)
 		sql = "DELETE FROM {} WHERE {} = %s".format(table, criterium)
 		val = (value,)
 		try:
 			self.cursor.execute(sql, val)
 			self.conn.commit()
-			self.sql_queries += 1
 			return True
 		except:
 			print("Database not alive")	
@@ -192,7 +229,6 @@ class Comm:
 		try:
 			self.cursor.execute(sql)
 			self.conn.commit()
-			self.sql_queries += 1
 			return True
 		except:
 			print("Database not alive")	
@@ -202,30 +238,27 @@ class Comm:
 		assert isinstance(robot_id, int)
 		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'assigned' ORDER BY priority"
 		val = (robot_id,)
-		#try:
-		self.conn.reconnect()
-		self.cursor.execute(sql, val)
-		result = self.cursor.fetchall()
-		self.sql_queries += 1
-		return result
-		#except:
-			#print("Database not alive")	
-			#self.sql_open()
-			#return None
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql, val)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive")	
+			return None
 
 	def sql_get_executing_task(self, robot_id):
 		assert isinstance(robot_id, int)
 		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'executing' ORDER BY priority"
 		val = (robot_id,)
-		#try:
-		self.conn.reconnect()
-		self.cursor.execute(sql, val)
-		result = self.cursor.fetchall()
-		self.sql_queries += 1
-		return result
-		#except:
-			#print("Database not alive")	
-			#return None
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql, val)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive")	
+			return None
 
 	def sql_delete_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
@@ -235,7 +268,6 @@ class Comm:
 			self.conn.reconnect()
 			self.cursor.execute(sql, val)
 			self.conn.commit()
-			self.sql_queries += 1
 			return True
 		except:
 			print("Database not alive")
@@ -256,6 +288,7 @@ class Comm:
 					node = %s,
 					status = %s,
 					battery_status = %s,
+					sql_queries = %s,
 					traveled_cost = %s,
 					charged_time = %s,
 					congestions = %s,
@@ -271,14 +304,14 @@ class Comm:
 					id = {}
 				""".format(id)
 		val = tuple(robot.values())
-		#try:
-		self.cursor.execute(sql, val)
-		self.conn.commit()
-		self.sql_queries += 1
-		return True
-		#except:
-			#print("Database not alive")	
-			#return False
+		try:
+			self.cursor.execute(sql, val)
+			self.conn.commit()
+			self.sql_queries += 1
+			return True
+		except:
+			print("Database not alive")	
+			return False
 
 	def sql_update_task(self, id, task):
 		assert isinstance(id, int)
@@ -295,14 +328,13 @@ class Comm:
 					id = {}
 				""".format(id)
 		val = tuple(task.values())
-		#try:
-		self.cursor.execute(sql, val)
-		self.conn.commit()
-		self.sql_queries += 1
-		return True
-		#except:
-			#print("Database not alive")	
-			#return False
+		try:
+			self.cursor.execute(sql, val)
+			self.conn.commit()
+			return True
+		except:
+			print("Database not alive")	
+			return False
 
 	def sql_update_tasks(self, tasks):
 		assert isinstance(tasks, list)
@@ -320,18 +352,30 @@ class Comm:
 					progress = %s,
 					message = %s,
 					status = %s, 
-					approach = %s
+					approach = %s,
+					task_bids = %s
 				WHERE 
 					id = %s
 				"""
 		val = tasks
-		#try:
-		self.cursor.executemany(sql, val)
-		self.conn.commit()
-		return True
-		#except:
-		print("Database not alive")	
-		return False
+		try:
+			self.cursor.executemany(sql, val)
+			self.conn.commit()
+			return True
+		except:
+			print("Database not alive")	
+			return False
+
+	def sql_update_reservations(self, pheromones):
+		sql = """UPDATE environmental_agents SET pheromone = %s WHERE id = %s"""
+		val = pheromones
+		try:
+			self.cursor.executemany(sql, val)
+			self.conn.commit()
+			return True
+		except:
+			print("Database not alive")	
+			return False
 
 	def sql_print_database(self):
 		try:
@@ -340,7 +384,7 @@ class Comm:
 			print('Task list')
 			for row in self.cursor:
 				print('\t' + str(row))
-			sql = "SELECT id, node, status, path FROM global_robot_list"
+			sql = "SELECT id, node, status, path, total_path, time_now FROM global_robot_list"
 			self.cursor.execute(sql)
 			print('Robot list')
 			for row in self.cursor:

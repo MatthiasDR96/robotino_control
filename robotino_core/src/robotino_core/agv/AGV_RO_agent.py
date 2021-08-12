@@ -28,7 +28,7 @@ class RO_agent:
 		while True:
 
 			# Timeout
-			time.sleep(0.1) # self.agv.params['dmas_rate'])
+			time.sleep(self.agv.params['dmas_rate'])
 
 			# Plan if there are tasks
 			if not self.agv.task_executing['id'] == -1:
@@ -81,11 +81,15 @@ class RO_agent:
 		# If end node not reached
 		if not start_node == self.agv.task_executing['node']:
 
-			# Do dmas
-			best_path, best_slots = self.dmas(start_node, node_to_visit, estimated_start_time, comm)
+			# Do dmas untill successful reservation
+			res = False
+			while not res:
 
-			# Reserve slots
-			self.intent(best_path, best_slots, comm)
+				# Do dmas
+				best_path, best_slots = self.dmas(start_node, node_to_visit, estimated_start_time, comm)
+
+				# Reserve slots
+				res = self.intent(best_path, best_slots, comm)
 
 			# Set paths towards all tasks
 			self.agv.reserved_paths[self.agv.task_executing['id']] = best_path
@@ -110,14 +114,18 @@ class RO_agent:
 		self.agv.total_path = []
 		for task in local_task_list:
 
-			# Do dmas
-			best_path, best_slots = self.dmas(start_node, [task['node']], estimated_start_time, comm)
+			# Do dmas untill successful reservation
+			res = False
+			while not res:
+
+				# Do dmas
+				best_path, best_slots = self.dmas(start_node, [task['node']], estimated_start_time, comm)
+
+				# Reserve slots
+				self.intent(best_path, best_slots, comm)
 
 			# Estimated end time and duration
 			estimated_end_time = best_slots[-1][0] + best_slots[-1][1]
-
-			# Reserve slots
-			self.intent(best_path, best_slots, comm)
 
 			# Set paths towards all tasks
 			self.agv.reserved_paths[task['id']] = best_path
@@ -217,27 +225,12 @@ class RO_agent:
 
 	def intent(self, path, slots, comm):
 		for i in range(len(path)):
-			self.reserve_slot(path[i], slots[i], comm)
+			result = self.reserve_slot(path[i], slots[i], comm)
+			if not result:
+				return False
+		return True
 			
 	def check_slot(self, node, slot, comm):
-
-		# Assertions
-		assert isinstance(node, str)
-		assert isinstance(slot[0], datetime)
-		assert isinstance(slot[1], timedelta)
-
-		# Check all available slots of other robots
-		available_slots = self.get_available_slots(node, slot, comm)
-
-		# Take first available slot and adapt the end time to the required end time
-		first_available_slot = available_slots[0]
-		first_available_slot = (first_available_slot[0], slot[1])
-
-		# Compute delay
-		delay = first_available_slot[0] - slot[0]
-		return first_available_slot, delay
-
-	def get_available_slots(self, node, slot, comm):
 
 		# Assertions
 		assert isinstance(node, str)
@@ -249,15 +242,14 @@ class RO_agent:
 		duration = slot[1]
 
 		# Get all reservations
-		time.sleep(0.1)
-		reservations = comm.sql_select_from_table('environmental_agents', 'node', node)
+		reservations = comm.sql_select_reservations('environmental_agents', node,  self.agv.id)
 
 		# Get all reservations from the requested reservation_time for all other robots
 		slots = []
 		for res in reservations:
 			start_time = datetime.strptime(res['start_time'], '%Y-%m-%d %H:%M:%S')
 			end_time = datetime.strptime(res['end_time'], '%Y-%m-%d %H:%M:%S')
-			if end_time > reservation_time and not res['robot'] == self.agv.id:
+			if end_time > reservation_time:
 				slots.append((start_time, end_time))
 
 		# Get free slots
@@ -274,7 +266,14 @@ class RO_agent:
 			free_slots.append((slots[-1][1], float('inf')))
 		else:
 			free_slots.append((reservation_time, float('inf')))
-		return free_slots
+
+		# Take first available slot and adapt the end time to the required end time
+		first_available_slot = free_slots[0]
+		first_available_slot = (first_available_slot[0], slot[1])
+
+		# Compute delay
+		delay = first_available_slot[0] - slot[0]
+		return first_available_slot, delay
 
 	def reserve_slot(self, node, slot, comm):
 
@@ -288,21 +287,20 @@ class RO_agent:
 		reservation_end_time = reservation_start_time + slot[1]
 
 		# Get all reservations
-		reservations = comm.sql_select_from_table('environmental_agents', 'node', node)
-
+		reservations = comm.sql_select_reservations('environmental_agents', node,  self.agv.id)
+		
+		# Check if reservation is valid before reserving
 		valid = True
 		for res in reservations:
 			start_time = datetime.strptime(res['start_time'], '%Y-%m-%d %H:%M:%S')
 			end_time = datetime.strptime(res['end_time'], '%Y-%m-%d %H:%M:%S')
-			if not res['robot'] == self.agv.id:
-				if reservation_start_time <= start_time < reservation_end_time or reservation_start_time < end_time <= reservation_end_time:
-					valid = False
-					break
+			if (reservation_start_time < start_time < reservation_end_time) or (reservation_start_time < end_time < reservation_end_time) or (start_time < reservation_start_time and end_time > reservation_end_time):
+				valid = False
+				break
 		if valid:
 			reservation_dict = {'node': node, 'robot': self.agv.id, 'start_time': reservation_start_time.strftime('%Y-%m-%d %H:%M:%S'), 'end_time': reservation_end_time.strftime('%Y-%m-%d %H:%M:%S'), 'pheromone': 100.0}
-			id = comm.sql_add_to_table('environmental_agents', reservation_dict)
-			# print("Slot (" + str(id) + ', '+ str(reservation_start_time) + ', ' + str(reservation_end_time) + ") reserved for agv " + str(self.agv.id))
-			return id
+			comm.sql_add_to_table('environmental_agents', reservation_dict)
+			return True
 		else:
 			print("Could not add slot (" + str(reservation_start_time) + ', ' + str(reservation_end_time) + ") of agv " + str(self.agv.id))
-			return None
+			return False
