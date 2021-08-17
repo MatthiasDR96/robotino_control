@@ -71,6 +71,7 @@ class Comm:
 				battery_status FLOAT,
 				sql_queries INT,
 				traveled_cost FLOAT,
+				traveled_dist FLOAT,
 				charged_time FLOAT,
 				congestions INT,
 				task_executing INT,
@@ -78,8 +79,10 @@ class Comm:
 				path VARCHAR(100),
 				total_path VARCHAR(100),
 				time_now VARCHAR(100),
-				executing_task_cost FLOAT,
-				local_task_list_cost FLOAT,
+				task_executing_estimated_cost FLOAT,
+				task_executing_estimated_dist FLOAT,
+				local_task_list_estimated_cost FLOAT,
+				local_task_list_estimated_dist FLOAT,
 				local_task_list_end_time  VARCHAR(100)
 		)
 		""".format(name)
@@ -199,6 +202,32 @@ class Comm:
 			print("Database not alive " + str(table))	
 			return None
 
+	def sql_get_local_task_list(self, robot_id):
+		assert isinstance(robot_id, int)
+		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'assigned' ORDER BY priority"
+		val = (robot_id,)
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql, val)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive")	
+			return None
+
+	def sql_get_executing_task(self, robot_id):
+		assert isinstance(robot_id, int)
+		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'executing' ORDER BY priority"
+		val = (robot_id,)
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql, val)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive")	
+			return None
+
 	def get_graph(self):
 		items = self.sql_select_everything_from_table('graph')
 		graph = Graph()
@@ -234,32 +263,6 @@ class Comm:
 			print("Database not alive")	
 			return False
 
-	def sql_get_local_task_list(self, robot_id):
-		assert isinstance(robot_id, int)
-		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'assigned' ORDER BY priority"
-		val = (robot_id,)
-		try:
-			self.conn.reconnect()
-			self.cursor.execute(sql, val)
-			result = self.cursor.fetchall()
-			return result
-		except:
-			print("Database not alive")	
-			return None
-
-	def sql_get_executing_task(self, robot_id):
-		assert isinstance(robot_id, int)
-		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'executing' ORDER BY priority"
-		val = (robot_id,)
-		try:
-			self.conn.reconnect()
-			self.cursor.execute(sql, val)
-			result = self.cursor.fetchall()
-			return result
-		except:
-			print("Database not alive")	
-			return None
-
 	def sql_delete_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
 		sql = "DELETE FROM global_task_list WHERE robot = %s AND status = 'assigned'"
@@ -290,6 +293,7 @@ class Comm:
 					battery_status = %s,
 					sql_queries = %s,
 					traveled_cost = %s,
+					traveled_dist = %s, 
 					charged_time = %s,
 					congestions = %s,
 					task_executing = %s,
@@ -297,8 +301,10 @@ class Comm:
 					path = %s,
 					total_path = %s,
 					time_now = %s,
-					executing_task_cost = %s,
-					local_task_list_cost = %s,
+					task_executing_estimated_cost = %s,
+					task_executing_estimated_dist = %s,
+					local_task_list_estimated_cost = %s,
+					local_task_list_estimated_dist = %s,
 					local_task_list_end_time = %s
 				WHERE
 					id = {}

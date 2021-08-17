@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import re
 import time
 import numpy as np
 
@@ -112,6 +113,7 @@ class RO_agent:
 
 		# Update paths for each task in local task list
 		self.agv.total_path = []
+
 		for task in local_task_list:
 
 			# Do dmas untill successful reservation
@@ -122,7 +124,7 @@ class RO_agent:
 				best_path, best_slots = self.dmas(start_node, [task['node']], estimated_start_time, comm)
 
 				# Reserve slots
-				self.intent(best_path, best_slots, comm)
+				res = self.intent(best_path, best_slots, comm)
 
 			# Estimated end time and duration
 			estimated_end_time = best_slots[-1][0] + best_slots[-1][1]
