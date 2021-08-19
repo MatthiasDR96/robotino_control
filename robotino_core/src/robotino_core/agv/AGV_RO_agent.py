@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-import re
 import time
 import numpy as np
 
@@ -76,9 +75,6 @@ class RO_agent:
 		start_node = self.agv.current_node
 		estimated_start_time = datetime.now() + timedelta(seconds=self.agv.calculate_euclidean_distance((self.agv.x_loc, self.agv.y_loc), self.agv.graph.nodes[self.agv.current_node].pos) / self.agv.params['robot_speed'])
 
-		# Nodes to visit
-		node_to_visit = [self.agv.task_executing['node']]
-
 		# If end node not reached
 		if not start_node == self.agv.task_executing['node']:
 
@@ -87,7 +83,7 @@ class RO_agent:
 			while not res:
 
 				# Do dmas
-				best_path, best_slots = self.dmas(start_node, node_to_visit, estimated_start_time, comm)
+				best_path, best_slots, best_dist = self.dmas(start_node, self.agv.task_executing['node'], estimated_start_time, comm)
 
 				# Reserve slots
 				res = self.intent(best_path, best_slots, comm)
@@ -121,7 +117,7 @@ class RO_agent:
 			while not res:
 
 				# Do dmas
-				best_path, best_slots = self.dmas(start_node, [task['node']], estimated_start_time, comm)
+				best_path, best_slots, best_dist = self.dmas(start_node, task['node'], estimated_start_time, comm)
 
 				# Reserve slots
 				res = self.intent(best_path, best_slots, comm)
@@ -142,43 +138,25 @@ class RO_agent:
 			# Start node for next task is end node of previous task
 			start_node = task['node']
 
-	def dmas(self, start_node, nodes_to_visit, start_time, comm):
+	def dmas(self, start, dest, start_time, comm):
 
 		# Assertions
-		assert isinstance(start_node, str)
-		assert isinstance(nodes_to_visit, list)
+		assert isinstance(start, str)
+		assert isinstance(dest, str)
 		assert isinstance(start_time, datetime)
-		assert len(nodes_to_visit) > 0
 
 		# Feasibility ants
-		local_feasible_paths = self.think(start_node, nodes_to_visit)
+		feasible_paths, feasible_distances = get_alternative_paths(self.agv.graph, start, dest, 5)
 
-		# If feasible paths exist
-		if local_feasible_paths:
+		# Exploration ants
+		fitness_values, slots = self.explore(feasible_paths, start_time, comm)
 
-			# Exploration ants
-			explored_paths, fitness_values, slots = self.explore(local_feasible_paths, start_time, comm)
+		# Best route selection
+		best_path = feasible_paths[int(np.argmin(fitness_values))]
+		best_slots = slots[int(np.argmin(fitness_values))]
+		best_dist = feasible_distances[int(np.argmin(fitness_values))]
 
-			# Best route selection
-			best_path = explored_paths[int(np.argmin(fitness_values))]
-			best_slots = slots[int(np.argmin(fitness_values))]
-
-			return best_path[1:], best_slots
-
-		else:
-			print("No feasible paths found")
-			return None, None
-
-	def think(self, start_node, nodes_to_visit):
-
-		# Assertions
-		assert isinstance(start_node, str)
-		assert isinstance(nodes_to_visit, list)
-		assert len(nodes_to_visit) > 0
-
-		# Find feasible paths
-		_, local_best_solutions = feasibility_ant_solve(self.agv.graph, start_node, nodes_to_visit)
-		return local_best_solutions
+		return best_path[1:], best_slots, best_dist
 
 	def explore(self, paths, start_time, comm):
 
@@ -223,7 +201,7 @@ class RO_agent:
 			total_delays.append(total_delay)
 			all_slots.append(slots)
 
-		return paths, fitness_values, all_slots
+		return fitness_values, all_slots
 
 	def intent(self, path, slots, comm):
 		for i in range(len(path)):

@@ -102,7 +102,7 @@ class Node:
         # General
         self.pos = node_location
         self.name = node_name
-        self.edges = []
+        self.edges = {}
         self.neighbors = []
 
         # For astar
@@ -113,44 +113,27 @@ class Node:
     def __str__(self):
         return self.name + ': ' + str(self.pos)
 
-    def __repr__(self):
-        return self.name + ': ' + str(self.pos)
-
     def __hash__(self):
         return hash(str(self))
 
     def __eq__(self, other):
         return self.name == other.name and self.pos == other.pos
 
-    def copy_node(self):
-        node = Node(self.pos, self.name)
-        node.neighbors = self.neighbors
-        node.edges = self.edges
-        node.g = 0
-        node.h = 0
-        node.parent = None
-        return node
-
     def add_edge(self, edge):
-        self.edges.append(edge)
+        self.edges[self.name, edge.end_node.name] = edge
 
     def add_neighbor(self, node):
         self.neighbors.append(node)
-
-    def move_cost(self, node):
-        cost = math.sqrt(math.pow(self.pos[0] - node.pos[0], 2) + math.pow(self.pos[1] - node.pos[1], 2))
-        return cost
-
-    def to_string(self):
-        return str(str(self.pos[0]) + "," + str(self.pos[1]))
-
 
 class Edge:
 
     def __init__(self, start_node, end_node, length, pheromone=0.1):
         self.start_node = start_node
         self.end_node = end_node
-        self.length = length
+        self.nodes_in_between = []
+        self.slots_in_between = []
+        self.dist = length
+        self.cost = length
         self.pheromone = pheromone
 
     def __str__(self):

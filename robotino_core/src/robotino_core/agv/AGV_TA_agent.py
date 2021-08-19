@@ -94,8 +94,6 @@ class TA_agent:
 
 						# If I want to participate
 						if my_bid_list is not None:
-							print(self.agv.params['epsilon'] * my_bid_list[0])
-							print((1 - self.agv.params['epsilon']) * my_bid_list[1])
 							my_bid = my_bid_list[0] # self.agv.params['epsilon'] * my_bid_list[0] + (1 - self.agv.params['epsilon']) * my_bid_list[1]
 						else:
 							my_bid = float('inf')
@@ -315,7 +313,7 @@ def tcp_client(ip, port, data):
 			pickled_data = pickle.dumps(data)
 
 			# Connect the socket to the port where the server is listening
-			print("AGV		Announces task " + str(data['id']) + " to AGV " + str(port) + ' at ' + str(datetime.now().time()))
+			print("AGV	Announces task " + str(data['id']) + " to AGV " + str(port) + ' at ' + str(datetime.now().time()))
 			sock.connect((ip, port))
 								
 			# Send data
@@ -325,7 +323,7 @@ def tcp_client(ip, port, data):
 			data = sock.recv(2024)
 			rec_data_loaded = pickle.loads(data)
 			if not isinstance(rec_data_loaded, str):
-				print("AGV		Received " + str(rec_data_loaded['values'][:2]) + " from AGV " + str(rec_data_loaded['robot']['id']) + ' on task ' + str(rec_data_loaded['task']['id']) + ' at ' + str(datetime.now().time()))
+				print("AGV	Received " + str(rec_data_loaded['values'][:2]) + " from AGV " + str(rec_data_loaded['robot']['id']) + ' on task ' + str(rec_data_loaded['task']['id']) + ' at ' + str(datetime.now().time()))
 			else:
 				print("Central auctioneer:		Received " + rec_data_loaded)
 			return rec_data_loaded

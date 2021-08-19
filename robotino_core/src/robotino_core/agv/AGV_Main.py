@@ -5,14 +5,13 @@ import os
 import time
 import math
 import signal
-import csv
 
 from robotino_core.Comm import Comm
 from robotino_core.agv.AGV_Action import Action
 from robotino_core.agv.AGV_RO_agent import RO_agent
 from robotino_core.agv.AGV_TA_agent import TA_agent
 from robotino_core.agv.AGV_RM_agent import RM_agent
-from robotino_core.solvers.astar_solver import find_shortest_path
+from robotino_core.solvers.astar_solver import get_shortest_path
 
 class AGV:
 
@@ -198,7 +197,7 @@ class AGV:
 		if self.ro_agent:
 			if not task['id'] in self.reserved_paths.keys(): self.ro_agent.plan_executing_task(self.comm_main)
 		else:
-			path, _ = find_shortest_path(self.comm_main.get_graph(), self.node, task['node'])
+			path, _ = get_shortest_path(self.comm_main.get_graph(), self.node, task['node'])
 			self.reserved_paths[task['id']] = path
 			self.reserved_slots[task['id']] = [0]
 
@@ -372,7 +371,7 @@ class AGV:
 						### Evaluate executing task ###
 
 						dist1 = self.calculate_euclidean_distance(current_location, self.graph.nodes[current_node].pos)
-						dist2 = find_shortest_path(self.graph, current_node, current_task['node'])[1]
+						dist2 = get_shortest_path(self.graph, current_node, current_task['node'])[1]
 						cost_to_executing_task = timedelta(seconds=(dist1+dist2)/self.params['robot_speed'])
 
 						# Calculate time slot
@@ -402,7 +401,7 @@ class AGV:
 						for task in current_local_task_list:
 
 							# Calculate time slot
-							dist = find_shortest_path(self.graph, start_node, task['node'])[1]
+							dist = get_shortest_path(self.graph, start_node, task['node'])[1]
 							cost_to_task = timedelta(seconds=dist/self.params['robot_speed'])
 							end_time = start_time + cost_to_task
 							duration = cost_to_task.total_seconds()
@@ -447,7 +446,7 @@ class AGV:
 			for task in task_sequence:
 
 				# Do dmas
-				_, best_slots = self.ro_agent.dmas(start_node, [task['node']], start_time, comm)
+				_, best_slots, _ = self.ro_agent.dmas(start_node, task['node'], start_time, comm)
 
 				# Estimated end time, charging cost is included in slots
 				end_time = best_slots[-1][0] + best_slots[-1][1]
@@ -466,7 +465,7 @@ class AGV:
 			for task in task_sequence:
 
 				# Do astar
-				dist = find_shortest_path(self.graph, start_node, task['node'])[1]
+				dist = get_shortest_path(self.graph, start_node, task['node'])[1]
 
 				# Compute cost
 				cost = timedelta(seconds=dist/self.params['robot_speed'])

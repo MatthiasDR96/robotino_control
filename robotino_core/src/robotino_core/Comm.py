@@ -1,8 +1,8 @@
+from mysql.connector import connect, Error
 import ast
 import numpy as np
 from operator import itemgetter
-from robotino_factory.Graph import Graph
-from mysql.connector import connect, Error
+from robotino_core.Graph import Graph
 
 class Comm:
 	"""

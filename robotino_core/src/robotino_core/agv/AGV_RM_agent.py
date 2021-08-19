@@ -283,7 +283,6 @@ class RM_agent:
 			cost += distance
 		return tour, cost
 
-
 def calculate_travel_cost(route, graph, speed):
 	path_cost = 0
 	for i in range(len(route) - 1):
