@@ -1,4 +1,5 @@
 from pyswarm import pso
+from copy import copy
 
 from robotino_core.Comm import Comm
 from robotino_core.solvers.genetic_algorithm_solver import *
@@ -26,10 +27,10 @@ class RM_agent:
 		self.candidate_insertion_index = None
 		self.start_node = None
 
-	def main(self):
+	def main(self, _, stop):
 
 		# Loop
-		print("   Resource agent:            Started")
+		print("RM-agent:	Main thread started")
 		while True:
 
 			# Check charging status
@@ -47,6 +48,11 @@ class RM_agent:
 					task_dict = {"node": closest_charging_station, "priority": 0, "robot": self.agv.id, "message": 'charging', "status": 'assigned'}
 					self.comm_main.sql_add_to_table('global_task_list', task_dict)
 
+			# Close thread at close event 
+			if stop():
+				print("RM-agent:	Main thread killed")
+				break
+
 	def solve(self, task_sequence):
 
 		# Init
@@ -58,7 +64,7 @@ class RM_agent:
 
 			# Calculate initial resources at start node
 			if self.agv.task_executing:
-				_, distance = find_shortest_path(self.agv.kb['graph'], self.agv.robot_node,
+				_, distance = get_shortest_path(self.agv.kb['graph'], self.agv.robot_node,
 												 self.agv.task_executing.pos_A)
 				if self.agv.task_executing.order_number == '000':
 					init_resources = self.agv.battery_status - self.resource_consumption(
@@ -96,9 +102,9 @@ class RM_agent:
 				start_node = start_node if insertion_index == 0 else new_task_sequence[insertion_index - 1]
 				end_node = new_task_sequence[insertion_index + 1]
 				charging_station = self.search_closest_charging_station(start_node)
-				_, dist1 = find_shortest_path(self.agv.kb['graph'], start_node, end_node)
-				_, dist2 = find_shortest_path(self.agv.kb['graph'], start_node, charging_station)
-				_, dist3 = find_shortest_path(self.agv.kb['graph'], charging_station, end_node)
+				_, dist1 = get_shortest_path(self.agv.kb['graph'], start_node, end_node)
+				_, dist2 = get_shortest_path(self.agv.kb['graph'], start_node, charging_station)
+				_, dist3 = get_shortest_path(self.agv.kb['graph'], charging_station, end_node)
 				charging_cost_travel = dist2 + dist3 - dist1
 				charging_cost = charging_cost_travel + charging_time
 
@@ -109,11 +115,11 @@ class RM_agent:
 
 		# From robot node to first task
 		charging_index_tour = -1
-		tour, _ = find_shortest_path(self.agv.kb['graph'], start_node, task_sequence[0])
+		tour, _ = get_shortest_path(self.agv.kb['graph'], start_node, task_sequence[0])
 		for i in range(len(task_sequence) - 1):
 			if i == charging_index:
 				charging_index_tour = len(tour) - 1
-			path, _ = find_shortest_path(self.agv.kb['graph'], task_sequence[i], task_sequence[i + 1])
+			path, _ = get_shortest_path(self.agv.kb['graph'], task_sequence[i], task_sequence[i + 1])
 			tour += path[1:]
 
 		# Compute normal consumption
@@ -141,7 +147,7 @@ class RM_agent:
 		closest_point = None
 		min_distance = float('inf')
 		for name in self.agv.params['depot_locations']:
-			_, distance = find_shortest_path(self.agv.graph, location, name)
+			_, distance = get_shortest_path(self.agv.graph, location, name)
 			if distance < min_distance:
 				min_distance = distance
 				closest_point = name
@@ -237,11 +243,11 @@ class RM_agent:
 			self.candidate_task_sequence = new_task_sequence
 
 			# Initial tour
-			_, dist1 = find_shortest_path(self.agv.kb['graph'], start_node, end_node)
+			_, dist1 = get_shortest_path(self.agv.kb['graph'], start_node, end_node)
 
 			# New tour
-			_, dist2 = find_shortest_path(self.agv.kb['graph'], start_node, charging_station)
-			_, dist3 = find_shortest_path(self.agv.kb['graph'], charging_station, end_node)
+			_, dist2 = get_shortest_path(self.agv.kb['graph'], start_node, charging_station)
+			_, dist3 = get_shortest_path(self.agv.kb['graph'], charging_station, end_node)
 
 			# Cost to travel to charging station
 			charging_cost_travel = dist2 + dist3 - dist1
@@ -276,9 +282,9 @@ class RM_agent:
 		return x * self.charging_factor + punishment
 
 	def compute_tour(self, task_sequence):
-		tour, cost = find_shortest_path(self.agv.kb['graph'], self.start_node, task_sequence[0])
+		tour, cost = get_shortest_path(self.agv.kb['graph'], self.start_node, task_sequence[0])
 		for i in range(len(task_sequence) - 1):
-			path, distance = find_shortest_path(self.agv.kb['graph'], task_sequence[i], task_sequence[i + 1])
+			path, distance = get_shortest_path(self.agv.kb['graph'], task_sequence[i], task_sequence[i + 1])
 			tour += path
 			cost += distance
 		return tour, cost

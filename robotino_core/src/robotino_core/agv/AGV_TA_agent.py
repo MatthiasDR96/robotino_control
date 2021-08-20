@@ -6,8 +6,6 @@ from multiprocessing import Pool
 from _thread import start_new_thread
 
 from robotino_core.Comm import Comm
-from robotino_core.solvers.tsp_solver import tsp
-
 
 class TA_agent:
 
@@ -90,7 +88,7 @@ class TA_agent:
 						best_bid = best_bid_list['values'][0] # self.agv.params['epsilon'] * best_bid_list['values'][0] + (1 - self.agv.params['epsilon']) * best_bid_list['values'][1]
 
 						# My bid
-						my_bid_list = self.compute_bid(tasks_to_assign, task, self.comm_local_consensus, True)
+						my_bid_list = self.compute_bid(tasks_to_assign, task, True, self.comm_local_consensus)
 
 						# If I want to participate
 						if my_bid_list is not None:
@@ -139,24 +137,25 @@ class TA_agent:
 		task = pickle.loads(data)
 		print('\nAGV ' + str(self.agv.id) +'         Received task: ' + str(task['id']))
 
-		# Get local task list
-		local_task_list = comm.sql_get_local_task_list(self.agv.id)
-
 		# Compute bid or add directly to local task list
 		if task['message'] == 'announce':
 
-			# Compute bid
-			bid_value_list = self.compute_bid(local_task_list, task, comm, False)
+			# Get local task list
+			local_task_list = comm.sql_get_local_task_list(self.agv.id)
 
-			# Make bid structure
-			if bid_value_list is not None:
-				robot = {'id': self.agv.id, 'ip': self.agv.ip, 'port': self.agv.port}
-				bid = {'values': bid_value_list, 'robot': robot, 'task': task}
-			else:
-				bid = None
+			# Compute bid
+			bid_value_list = self.compute_bid(local_task_list, task, False, comm)
+
+			# Make robot dict
+			robot = {'id': self.agv.id, 'ip': self.agv.ip, 'port': self.agv.port}
+
+			# Make bid dict
+			bid = {'values': bid_value_list, 'robot': robot, 'task': task} if bid_value_list is not None else None
 
 			# Send bid to the auctioneer
 			conn.sendall(pickle.dumps(bid))
+
+			# Print 
 			if bid is None:
 				print("Agv " + str(self.agv.id) + ":        Sent bid " + str(bid) + " to auctioneer")
 			else:
@@ -165,8 +164,10 @@ class TA_agent:
 		elif task['message'] == 'assign':
 
 			# Add assigned tasks optimally to local task list
-			updated_tasks = self.update_local_task_list(local_task_list, task)
-			result = comm.sql_update_tasks(updated_tasks)
+			task_dict = {'robot': self.agv.id, 'status': 'assigned', 'priority': 1, 'task_bids': str(task['task_bids']), 'message': 'assign'}
+			result = comm.sql_update_task(task['id'], task_dict)
+
+			# Print
 			if result:
 				conn.sendall(pickle.dumps('task_accepted'))
 				print("Agv " + str(self.agv.id) + ":        Added task " + str(task['id']) + " to local task list")
@@ -178,17 +179,19 @@ class TA_agent:
 		conn.close()
 		comm.sql_close()
 
-	def compute_bid(self, local_task_list, task, comm, substract):
+	def compute_bid(self, local_task_list, task, substract, comm):
 
 		"""
 
 		Computes the difference between the estimated current cost of the local task list and the 
-		estimated cost of the local task list including the new task
+		estimated cost of the local task list including the new task, as well as the estimated 
+		start time, end time, and duration of the new task
 
 		Input:
 			- Local task list
 			- New task
 			- Substract the new task from the local task list or add it 
+			- Communication layer
 		Output:
 			- Objective list
 
@@ -199,43 +202,29 @@ class TA_agent:
 		assert isinstance(task, dict)
 		assert isinstance(substract, bool)
 
-		# Start node
+		# Do not bid on task that is already in local task list
+		if task['node'] in [task['node'] for task in local_task_list] or task['node'] == self.agv.node or task['node'] == self.agv.task_executing['node']:
+			return None
+
+		# Start situation
+		start_time = self.agv.task_executing_estimated_end_time if not self.agv.task_executing['id'] == -1 else datetime.now()
 		start_node = self.agv.task_executing['node'] if not self.agv.task_executing['id'] == -1 else self.agv.node
 
 		# Get new local task list
-		if not substract:
-			new_local_task_list = local_task_list + [task]
-		else:
-			new_local_task_list = [t for t in local_task_list if t['id'] != task['id']]
+		new_local_task_list = local_task_list + [task] if not substract else [t for t in local_task_list if t['id'] != task['id']]
 
-		# Extract only node names from tasks
-		nodes_to_visit = [task['node'] for task in new_local_task_list]
-
-		# Optimize sequence
-		task_sequence, _, _ = tsp(self.agv.graph, start_node, nodes_to_visit)
-
-		# If one position occures multiple times, do not participate
-		if not len(task_sequence) == len(new_local_task_list):
-			return None
-
-		# Convert task node names back to tasks
-		task_sequence = [new_local_task_list[nodes_to_visit.index(name)] for name in task_sequence]
-
-		# Consider resource management
-		charging_time = 0.0
-		if self.agv.rm_agent:
-			_, _, charging_time, _ = self.agv.resource_management.solve(task_sequence)
-			
-			# TODO this must not be added here => only cost calculation
-			# #if insertion_index is not None:
-				#task_dict = {"node": charging_station, "robot": self.agv.id, "message": 'charging', "status": 'assigned'}
-				#task_sequence.insert(insertion_index, task_dict)
-
-		# Evaluate task sequence
-		travel_times = self.agv.evaluate_local_task_list(task_sequence, comm)
+		# TSP wrapper
+		sequence, _, _, _, costs = self.agv.tsp_dmas(start_node, start_time, new_local_task_list, comm)
 
 		# Calculate new cost
-		new_cost = sum(travel_times) + charging_time
+		new_cost = sum(costs)
+
+		print("Compute bid")
+		print("Start node: " + str(start_node))
+		print("Local task list" + str([task['node'] for task in new_local_task_list])) 
+		print("Sequence: " + str([task['node'] for task in sequence])) 
+		print("Current cost: " + str(self.agv.local_task_list_estimated_cost))
+		print("New cost: " + str(new_cost))
 
 		# Marginal cost to execute task
 		min_sum = new_cost - self.agv.local_task_list_estimated_cost
@@ -243,9 +232,9 @@ class TA_agent:
 
 		# Compute start, end and duration
 		if not substract:
-			task_index = task_sequence.index(task)
-			start_time = timedelta(seconds=sum(travel_times[0:task_index])) + datetime.now()
-			end_time = timedelta(seconds=sum(travel_times[0:task_index+1])) + datetime.now()
+			task_index = sequence.index(task)
+			start_time = timedelta(seconds=sum(costs[0:task_index])) + datetime.now()
+			end_time = timedelta(seconds=sum(costs[0:task_index+1])) + datetime.now()
 			duration = end_time - start_time
 		else:
 			start_time = 0.0
@@ -256,50 +245,6 @@ class TA_agent:
 		objective_list = [min_sum, min_max, start_time, end_time, duration]
 
 		return objective_list
-
-	def update_local_task_list(self, local_task_list, task):
-
-		"""
-
-		Updates the local task list with the new task in an optimal sequence
-
-		Input:
-			- Local task list
-			- New task
-			- Start node
-		Output:
-			- Updates task list
-
-		"""
-
-		# Assertions
-		assert isinstance(local_task_list, list)
-		assert isinstance(task, dict)
-
-		# Start node
-		start_node = self.agv.task_executing['node'] if not self.agv.task_executing['id'] == -1 else self.agv.node
-
-		# Get tasks in new local task list
-		new_local_task_list = local_task_list + [task]
-
-		# Extract only node names from tasks
-		nodes_to_visit = [task['node'] for task in new_local_task_list]
-
-		# Optimize sequence
-		task_sequence, _, _ = tsp(self.agv.graph, start_node, nodes_to_visit)
-
-		# Convert task node names back to tasks
-		task_sequence = [new_local_task_list[nodes_to_visit.index(name)] for name in task_sequence]
-
-		# Add new local task list
-		tasks = []
-		priority = 1
-		for task in task_sequence:
-			tasks.append((priority, self.agv.id, '-', '-', '-', '-', '-', '-', 0.0, 'assign', 'assigned', task['approach'], str(task['task_bids']), task['id']))
-			priority += 1
-
-		return tasks
-
 
 def tcp_client(ip, port, data):
 

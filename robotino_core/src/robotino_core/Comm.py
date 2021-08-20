@@ -77,7 +77,7 @@ class Comm:
 				task_executing INT,
 				moving_to VARCHAR(100),
 				path VARCHAR(100),
-				total_path VARCHAR(100),
+				total_path LONGTEXT,
 				time_now VARCHAR(100),
 				task_executing_estimated_cost FLOAT,
 				task_executing_estimated_dist FLOAT,
@@ -158,7 +158,7 @@ class Comm:
 			self.conn.commit()
 			return self.cursor.lastrowid
 		except:
-			print("Database not alive")
+			print("Database not alive1")
 			return None
 
 	def sql_select_reservations(self, table, node, id):
@@ -173,7 +173,7 @@ class Comm:
 			result = self.cursor.fetchall()
 			return result
 		except:
-			print("Database not alive")	
+			print("Database not alive2")	
 			return None
 
 	def sql_select_from_table(self, table, criterium, value):
@@ -187,7 +187,7 @@ class Comm:
 			result = self.cursor.fetchall()
 			return result
 		except:
-			print("Database not alive")	
+			print("Database not alive3")	
 			return None
 		
 	def sql_select_everything_from_table(self, table):
@@ -212,7 +212,7 @@ class Comm:
 			result = self.cursor.fetchall()
 			return result
 		except:
-			print("Database not alive")	
+			print("Database not alive4")	
 			return None
 
 	def sql_get_executing_task(self, robot_id):
@@ -225,7 +225,7 @@ class Comm:
 			result = self.cursor.fetchall()
 			return result
 		except:
-			print("Database not alive")	
+			print("Database not alive5")	
 			return None
 
 	def get_graph(self):
@@ -248,7 +248,7 @@ class Comm:
 			self.conn.commit()
 			return True
 		except:
-			print("Database not alive")	
+			print("Database not alive6")	
 			return False
 
 	def sql_delete_everything_from_table(self, table):
@@ -260,7 +260,7 @@ class Comm:
 			self.conn.commit()
 			return True
 		except:
-			print("Database not alive")	
+			print("Database not alive7")	
 			return False
 
 	def sql_delete_local_task_list(self, robot_id):
@@ -273,7 +273,7 @@ class Comm:
 			self.conn.commit()
 			return True
 		except:
-			print("Database not alive")
+			print("Database not alive8")
 			return False
 
 	def sql_update_robot(self, id, robot): 
@@ -316,7 +316,7 @@ class Comm:
 			self.sql_queries += 1
 			return True
 		except:
-			print("Database not alive")	
+			print("Database not alive9")	
 			return False
 
 	def sql_update_task(self, id, task):
@@ -339,7 +339,7 @@ class Comm:
 			self.conn.commit()
 			return True
 		except:
-			print("Database not alive")	
+			print("Database not alive10")	
 			return False
 
 	def sql_update_tasks(self, tasks):
@@ -369,7 +369,7 @@ class Comm:
 			self.conn.commit()
 			return True
 		except:
-			print("Database not alive")	
+			print("Database not alive11")	
 			return False
 
 	def sql_update_reservations(self, pheromones):
@@ -380,7 +380,7 @@ class Comm:
 			self.conn.commit()
 			return True
 		except:
-			print("Database not alive")	
+			print("Database not alive12")	
 			return False
 
 	def sql_print_database(self):
@@ -397,5 +397,5 @@ class Comm:
 				print('\t' + str(row))
 			print()
 		except:
-			print("Database not alive")
+			print("Database not alive13")
 

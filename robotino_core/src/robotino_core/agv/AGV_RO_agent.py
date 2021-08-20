@@ -36,6 +36,9 @@ class RO_agent:
 				# Plan path and slots towards executing task
 				self.plan_executing_task(self.comm_main)
 
+			# Plan if there are tasks
+			if not self.agv.task_executing['id'] == -1:
+
 				# Plan path and slots towards local tasks
 				self.plan_local_tasks(self.comm_main)
 
@@ -60,7 +63,7 @@ class RO_agent:
 				if len(local_task_list) == 0 and self.agv.task_executing['id'] == -1 and not self.agv.node == self.agv.depot:
 
 					# Add task to task list
-					task_dict = {"node": self.agv.depot, "priority": 1, "robot": self.agv.id, "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'homing', "status": 'assigned', "approach": '-'}
+					task_dict = {"node": self.agv.depot, "priority": 1, "robot": self.agv.id, "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'homing', "status": 'assigned', "approach": '-', 'task_bids': '-'}
 					self.comm_homing.sql_add_to_table('global_task_list', task_dict)
 
 			# Close thread at close event 
@@ -70,6 +73,9 @@ class RO_agent:
 
 
 	def plan_executing_task(self, comm):
+
+		# Assertions
+		assert isinstance(comm, Comm)
 
 		# Init
 		start_node = self.agv.current_node
@@ -83,7 +89,7 @@ class RO_agent:
 			while not res:
 
 				# Do dmas
-				best_path, best_slots, best_dist = self.dmas(start_node, self.agv.task_executing['node'], estimated_start_time, comm)
+				best_path, best_slots, _, _ = self.dmas(start_node, self.agv.task_executing['node'], estimated_start_time, comm)
 
 				# Reserve slots
 				res = self.intent(best_path, best_slots, comm)
@@ -100,43 +106,44 @@ class RO_agent:
 
 	def plan_local_tasks(self, comm):
 
+		# Assertions
+		assert isinstance(comm, Comm)
+
 		# Init
 		start_node = self.agv.task_executing['node']
-		estimated_start_time = self.agv.reserved_slots[self.agv.task_executing['id']][-1][0] + self.agv.reserved_slots[self.agv.task_executing['id']][-1][1]
+		start_time = self.agv.reserved_slots[self.agv.task_executing['id']][-1][0] + self.agv.reserved_slots[self.agv.task_executing['id']][-1][1]
 
 		# Get tasks in local task list
 		local_task_list = comm.sql_get_local_task_list(self.agv.id)
 
-		# Update paths for each task in local task list
-		self.agv.total_path = []
+		# Do dmas untill successful reservation
+		res = False
+		while not res:
 
-		for task in local_task_list:
+			# Update local_task_list
+			sequence, paths, slots, _, _ = self.agv.tsp_dmas(start_node, start_time, local_task_list, comm)
 
-			# Do dmas untill successful reservation
-			res = False
-			while not res:
+			# Update local°task_list sequence
+			priority = 1
+			for task in sequence:
+				task_dict = {'priority': priority}
+				comm.sql_update_task(task['id'], task_dict)
+				priority += 1
 
-				# Do dmas
-				best_path, best_slots, best_dist = self.dmas(start_node, task['node'], estimated_start_time, comm)
+			# Create total path and slots
+			total_path = [item for sublist in paths for item in sublist]
+			total_slots = [item for sublist in slots for item in sublist]
 
-				# Reserve slots
-				res = self.intent(best_path, best_slots, comm)
-
-			# Estimated end time and duration
-			estimated_end_time = best_slots[-1][0] + best_slots[-1][1]
+			# Reserve slots
+			res = self.intent(total_path, total_slots, comm)
 
 			# Set paths towards all tasks
-			self.agv.reserved_paths[task['id']] = best_path
-			self.agv.reserved_slots[task['id']] = best_slots
+			self.agv.total_path = total_path
 
-			# Set paths towards all tasks
-			self.agv.total_path.extend(best_path)
-			
-			# Estimated start time for next task
-			estimated_start_time = estimated_end_time
-
-			# Start node for next task is end node of previous task
-			start_node = task['node']
+		# Set paths towards all tasks
+		for i in range(len(sequence)):
+			self.agv.reserved_paths[sequence[i]['id']] = paths[i]
+			self.agv.reserved_slots[sequence[i]['id']] = slots[i]
 
 	def dmas(self, start, dest, start_time, comm):
 
@@ -144,30 +151,33 @@ class RO_agent:
 		assert isinstance(start, str)
 		assert isinstance(dest, str)
 		assert isinstance(start_time, datetime)
+		assert isinstance(comm, Comm)
 
 		# Feasibility ants
-		feasible_paths, feasible_distances = get_alternative_paths(self.agv.graph, start, dest, 5)
+		feasible_paths, _ = get_alternative_paths(self.agv.graph, start, dest, 5)
 
 		# Exploration ants
-		fitness_values, slots = self.explore(feasible_paths, start_time, comm)
+		fitness_values, slots, dists, costs = self.explore(feasible_paths, start_time, comm)
 
 		# Best route selection
 		best_path = feasible_paths[int(np.argmin(fitness_values))]
 		best_slots = slots[int(np.argmin(fitness_values))]
-		best_dist = feasible_distances[int(np.argmin(fitness_values))]
+		best_dist = dists[int(np.argmin(fitness_values))]
+		best_cost = costs[int(np.argmin(fitness_values))]
 
-		return best_path[1:], best_slots, best_dist
+		return best_path[1:], best_slots, best_dist, best_cost
 
 	def explore(self, paths, start_time, comm):
 
 		# Assertions
 		assert isinstance(paths, list)
 		assert isinstance(start_time, datetime)
+		assert isinstance(comm, Comm)
 
 		# Init
 		fitness_values = []
-		total_travel_costs = []
-		total_delays = []
+		total_dists = []
+		total_costs = []
 		all_slots = []
 
 		# Explore paths
@@ -175,35 +185,48 @@ class RO_agent:
 
 			# Init
 			timestamp = start_time
-			total_delay = timedelta()
-			total_travel_time = timedelta()
+			total_dist = 0.0
+			total_cost = 0.0
 			slots = []
 
 			# Calculate slot of nodes in between
 			for i in range(0, len(path) - 1):
 
-				# Calculate traveltime to drive to node i+1
-				travel_time = timedelta(seconds=self.agv.graph.edges[path[i], path[i + 1]].length / self.agv.params['robot_speed'])
+				# Calculate dist and traveltime to drive to node i+1
+				dist = self.agv.graph.edges[path[i], path[i + 1]].dist
+				travel_time = timedelta(seconds= dist / self.agv.params['robot_speed'])
+
+				# Get wanted slot
 				wanted_slot = (timestamp, travel_time)
 
 				# Check available slots for node i+1
 				slot, delay = self.check_slot(path[i+1], wanted_slot, comm)
+				
+				# Calculate edge cost
+				cost = travel_time.total_seconds() + delay.total_seconds()
 
 				# Append slot and update state
-				slots.append(slot)
-				total_travel_time += travel_time
-				total_delay += delay
 				timestamp += travel_time + delay
+				total_dist += dist
+				total_cost += cost
+				slots.append(slot)
 
 			# Collect results
 			fitness_values.append(timestamp)
-			total_travel_costs.append(total_travel_time)
-			total_delays.append(total_delay)
+			total_dists.append(total_dist)
+			total_costs.append(total_cost)
 			all_slots.append(slots)
 
-		return fitness_values, all_slots
+		return fitness_values, all_slots, total_dists, total_costs
 
 	def intent(self, path, slots, comm):
+
+		# Assertions
+		assert isinstance(path, list)
+		assert isinstance(slots, list)
+		assert isinstance(comm, Comm)
+
+		# Intent
 		for i in range(len(path)):
 			result = self.reserve_slot(path[i], slots[i], comm)
 			if not result:
@@ -216,6 +239,7 @@ class RO_agent:
 		assert isinstance(node, str)
 		assert isinstance(slot[0], datetime)
 		assert isinstance(slot[1], timedelta)
+		assert isinstance(comm, Comm)
 
 		# Get slot information
 		reservation_time = slot[0]
@@ -261,6 +285,7 @@ class RO_agent:
 		assert isinstance(node, str)
 		assert isinstance(slot[0], datetime)
 		assert isinstance(slot[1], timedelta)
+		assert isinstance(comm, Comm)
 
 		# Get slot
 		reservation_start_time = slot[0]

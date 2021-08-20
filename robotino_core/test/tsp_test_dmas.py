@@ -28,10 +28,10 @@ graph.create_edges(list(node_neighbors.keys()), list(node_neighbors.values()))
 graph.plot()
 
 # New task
-new_task = 'pos_4'
+new_task = 'pos_16'
 
 # Get tasks in local task list
-local_task_list = ['pos_14', 'pos_11']
+local_task_list = []
 
 # Get tasks in new local task list
 new_local_task_list = local_task_list + [new_task]
@@ -48,7 +48,7 @@ def distance_function(start_node, end_node):
     return best_path, best_slots, best_dist, best_cost
 
 # Compute cost of current tour
-current_solution = tsp(start_node, local_task_list, distance_function)
+current_solution = tsp(start_node, new_local_task_list, distance_function)
 current_cost = sum(current_solution['costs'])
 
 # Compute cost of new tour

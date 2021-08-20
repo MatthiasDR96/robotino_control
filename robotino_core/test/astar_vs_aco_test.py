@@ -20,16 +20,6 @@ dest = 'pos_14'
 # Number of solutions
 n = 5
 
-# Find single shortest path
-start_astar = datetime.now()
-path, dist = astar.get_shortest_path(graph, start, dest)
-stop_astar = datetime.now()
-diff_astar = (stop_astar - start_astar).total_seconds()
-
-# Print results
-print("\nAstar path:   took " + str(diff_astar) + " seconds")
-print(path)
-
 # Find multi shortest path
 start_astar = datetime.now()
 path, dist = astar.get_alternative_paths(graph, start, dest, n)
@@ -40,16 +30,6 @@ diff_astar = (stop_astar - start_astar).total_seconds()
 print("\nAstar paths:   took " + str(diff_astar) + " seconds")
 for i in range(len(path)):
     print(path[i])
-
-# Find single shortest path
-start_aco = datetime.now()
-path, dist = aco.get_shortest_path(graph, start, dest)
-stop_aco = datetime.now()
-diff_aco = (stop_aco - start_aco).total_seconds()
-
-# Print results
-print("\nAco path:   took " + str(diff_aco) + " seconds")
-print(path)
 
 # Find multi shortest path
 start_aco = datetime.now()

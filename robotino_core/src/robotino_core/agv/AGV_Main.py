@@ -12,6 +12,8 @@ from robotino_core.agv.AGV_RO_agent import RO_agent
 from robotino_core.agv.AGV_TA_agent import TA_agent
 from robotino_core.agv.AGV_RM_agent import RM_agent
 from robotino_core.solvers.astar_solver import get_shortest_path
+from robotino_core.solvers.tsp_solver import tsp
+
 
 class AGV:
 
@@ -98,7 +100,7 @@ class AGV:
 		# Create logger table
 		self.comm_main.sql_drop_table('robot' + str(self.id))
 		self.comm_main.sql_create_robot_table('robot' + str(self.id))
-		
+
 		# Main AGV agent processes
 		threads = []
 		threads.append(threading.Thread(target=self.main, args=(1, lambda: self.stop_threads)))
@@ -154,7 +156,7 @@ class AGV:
 
 				# Remove from local task list and add task to executing list
 				self.task_executing_start_time = datetime.now()
-				task_dict = {'robot': self.id, 'status': 'executing', 'real_start_time': self.task_executing_start_time.strftime('%H:%M:%S')}
+				task_dict = {'priority': 0, 'status': 'executing', 'real_start_time': self.task_executing_start_time.strftime('%H:%M:%S')}
 				self.comm_main.sql_update_task(self.task_executing['id'], task_dict)
 
 				# Move to task
@@ -255,6 +257,9 @@ class AGV:
 		print("AGV-agent:	Odom thread started")
 		while True:
 
+			# Timeout
+			time.sleep(0.1)
+
 			# Calculate sql queries
 			self.sql_queries = self.comm_main.sql_queries + self.comm_odom_callback.sql_queries + self.comm_cost_estimator.sql_queries
 			if self.ta_agent: self.sql_queries += self.ta_agent.comm_local_consensus.sql_queries 
@@ -313,9 +318,9 @@ class AGV:
 
 						# Calculate distance
 						dist1 = self.calculate_euclidean_distance(current_location, self.graph.nodes[current_node].pos)
-						dist2 = sum([self.graph.edges[path[i], path[i+1]].length for i in range(len(path)-1)]) 
+						dist2 = sum([self.graph.edges[path[i], path[i+1]].dist for i in range(len(path)-1)]) 
 						if not self.current_node == path[0]:
-							dist2 += self.graph.edges[current_node, path[0]].length
+							dist2 += self.graph.edges[current_node, path[0]].dist
 
 						# Calculate time slot
 						start_time = self.task_executing_start_time
@@ -346,7 +351,7 @@ class AGV:
 							slots = self.reserved_slots[task['id']]
 
 							# Calculate distance
-							dist = sum([self.graph.edges[path[i], path[i+1]].length for i in range(len(path))])
+							dist = sum([self.graph.edges[path[i], path[i+1]].dist for i in range(len(path))])
 
 							# Calculate time slot
 							start_time = slots[0][0]
@@ -421,6 +426,10 @@ class AGV:
 						self.local_task_list_estimated_cost = local_task_cost
 						self.local_task_list_estimated_end_time = end_time
 
+
+						print("Current cost: " + str(self.local_task_list_estimated_cost))
+						
+
 				else:
 					self.task_executing_estimated_cost = 0.0				
 
@@ -432,58 +441,41 @@ class AGV:
 				print("AGV-agent:	Cost estimator thread killed")
 				break				
 
-	def evaluate_local_task_list(self, task_sequence, comm):
+	def tsp_dmas(self, start_node, start_time, tasks_to_visit, comm):
 
-		# Start situation
-		start_time = self.task_executing_estimated_end_time if not self.task_executing['id'] == -1 else datetime.now()
-		start_node = self.task_executing['node'] if not self.task_executing['id'] == -1 else self.node
+		# Assertions
+		assert isinstance(start_node, str)
+		assert isinstance(start_time, datetime)
+		assert isinstance(tasks_to_visit, list)
+		assert isinstance(comm, Comm)
 
-		# Loop
-		travel_times = []
+		# Distance function
 		if self.ro_agent:
-
-			# Evaluate local task list
-			for task in task_sequence:
-
-				# Do dmas
-				_, best_slots, _ = self.ro_agent.dmas(start_node, task['node'], start_time, comm)
-
-				# Estimated end time, charging cost is included in slots
-				end_time = best_slots[-1][0] + best_slots[-1][1]
-				
-				# Compute cost
-				duration = end_time - start_time
-				travel_times.append(float(duration.total_seconds()))
-
-				# New start
-				start_time = end_time
-				start_node = task['node']
-				
+			def distance_function(start_node, end_node):
+				best_path, best_slots, best_dist, best_cost = self.ro_agent.dmas(start_node, end_node, start_time, comm)
+				return best_path, best_slots, best_dist, best_cost
 		else:
+			def distance_function(start_node, end_node):
+				best_path, best_dist = get_shortest_path(self.graph, start_node, end_node)
+				return best_path, [], best_dist, best_dist
 
-			# Evaluate local task list
-			for task in task_sequence:
+		# Extract only node names from tasks
+		nodes_to_visit = [task['node'] for task in tasks_to_visit]
 
-				# Do astar
-				dist = get_shortest_path(self.graph, start_node, task['node'])[1]
+		# Execute TSP with dmas
+		solution = tsp(start_node, nodes_to_visit, distance_function)
 
-				# Compute cost
-				cost = timedelta(seconds=dist/self.params['robot_speed'])
+		# Extract solution
+		sequence = solution['sequence']
+		paths = solution['paths']
+		slots = solution['slots']
+		dists = solution['dists']
+		costs = solution['costs']
 
-				# Add charging cost
-				if self.rm_agent:
-					cost += task['charging_time']
-				travel_times.append(float(cost.total_seconds()))
+		# Convert task node names back to tasks
+		sequence = [tasks_to_visit[nodes_to_visit.index(name)] for name in sequence]
 
-				# Estimated end time and duration
-				end_time = start_time + cost
-				duration = end_time - start_time
-				
-				# New start
-				start_time = end_time
-				start_node = task['node']
-
-		return travel_times
+		return sequence, paths, slots, dists, costs
 
 	def search_closest_node(self, loc):
 		graph = self.comm_main.get_graph()
