@@ -79,7 +79,7 @@ class RO_agent:
 
 		# Init
 		start_node = self.agv.current_node
-		estimated_start_time = datetime.now() + timedelta(seconds=self.agv.calculate_euclidean_distance((self.agv.x_loc, self.agv.y_loc), self.agv.graph.nodes[self.agv.current_node].pos) / self.agv.params['robot_speed'])
+		start_time = datetime.now() + timedelta(seconds=self.agv.calculate_euclidean_distance((self.agv.x_loc, self.agv.y_loc), self.agv.graph.nodes[self.agv.current_node].pos) / self.agv.params['robot_speed'])
 
 		# If end node not reached
 		if not start_node == self.agv.task_executing['node']:
@@ -89,20 +89,49 @@ class RO_agent:
 			while not res:
 
 				# Do dmas
-				best_path, best_slots, _, _ = self.dmas(start_node, self.agv.task_executing['node'], estimated_start_time, comm)
+				best_path, best_slots, _, _ = self.dmas(start_node, self.agv.task_executing['node'], start_time, comm)
 
 				# Reserve slots
 				res = self.intent(best_path, best_slots, comm)
 
-			# Set paths towards all tasks
-			self.agv.reserved_paths[self.agv.task_executing['id']] = best_path
-			self.agv.reserved_slots[self.agv.task_executing['id']] = best_slots
+				# Set paths towards all tasks
+				self.agv.reserved_paths[self.agv.task_executing['id']] = best_path
+				self.agv.reserved_slots[self.agv.task_executing['id']] = best_slots
 
 		else:
 
 			# Set paths towards all tasks
 			self.agv.reserved_paths[self.agv.task_executing['id']] = []
-			self.agv.reserved_slots[self.agv.task_executing['id']] = [(timedelta(), estimated_start_time)]
+			self.agv.reserved_slots[self.agv.task_executing['id']] = [(start_time, timedelta())]
+
+		# Get path and slots
+		path = self.agv.reserved_paths[self.agv.task_executing['id']]
+		slots = self.agv.reserved_slots[self.agv.task_executing['id']]
+		
+		# Calculate distance
+		dist = self.agv.calculate_euclidean_distance((self.agv.x_loc, self.agv.y_loc), self.agv.graph.nodes[self.agv.current_node].pos)
+		dist += sum([self.agv.graph.edges[path[i], path[i+1]].dist for i in range(len(path)-1)]) 
+					
+		# Calculate end time
+		end_time = slots[-1][0] + slots[-1][1]
+
+		# Calculate time slot
+		start_time = self.agv.task_executing_start_time
+		cost = (end_time - start_time).total_seconds()
+					
+		# Calculate progres
+		cost_to_be_done = (end_time - datetime.now()).total_seconds()
+		progress = round(((cost - cost_to_be_done) / cost) * 100 if not cost == 0.0 else 0.0)
+
+		# Save attributes
+		self.traveled_cost = (datetime.now() - self.agv.start_time).total_seconds()
+		self.task_executing_estimated_dist = dist
+		self.task_executing_estimated_cost = cost_to_be_done
+		self.task_executing_estimated_end_time = end_time
+
+		# Update executing task
+		task_dict = {'progress': progress, 'estimated_start_time': self.agv.task_executing_start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(cost)}
+		comm.sql_update_task(self.agv.task_executing['id'], task_dict)
 
 	def plan_local_tasks(self, comm):
 
@@ -123,27 +152,57 @@ class RO_agent:
 			# Update local_task_list
 			sequence, paths, slots, _, _ = self.agv.tsp_dmas(start_node, start_time, local_task_list, comm)
 
-			# Update local°task_list sequence
+			# Adapt slots to be correct
+			new_slots = copy(slots)
+			prev_slot = (slots[0][0][0], timedelta()) if len(slots) > 0 else ()
+			for i in range(len(slots)):
+				for j in range(len(slots[i])):
+					new_slots[i][j] = (prev_slot[0] + prev_slot[1], slots[i][j][1])
+					prev_slot = (prev_slot[0] + prev_slot[1], slots[i][j][1])
+
+			# Create total path and slots
+			total_path = [item for sublist in paths for item in sublist]
+			total_slots = [item for sublist in slots for item in sublist]
+
+			# Set paths towards all tasks
+			self.agv.total_path = total_path
+
+			# Update local_task_list sequence
 			priority = 1
 			for task in sequence:
 				task_dict = {'priority': priority}
 				comm.sql_update_task(task['id'], task_dict)
 				priority += 1
 
-			# Create total path and slots
-			total_path = [item for sublist in paths for item in sublist]
-			total_slots = [item for sublist in slots for item in sublist]
-
 			# Reserve slots
 			res = self.intent(total_path, total_slots, comm)
 
 			# Set paths towards all tasks
-			self.agv.total_path = total_path
+			end_time = self.task_executing_estimated_end_time
+			for i in range(len(sequence)):
 
-		# Set paths towards all tasks
-		for i in range(len(sequence)):
-			self.agv.reserved_paths[sequence[i]['id']] = paths[i]
-			self.agv.reserved_slots[sequence[i]['id']] = slots[i]
+				# Save paths and slots
+				self.agv.reserved_paths[sequence[i]['id']] = paths[i]
+				self.agv.reserved_slots[sequence[i]['id']] = slots[i]
+
+				# Calculate distance
+				dist = sum([self.agv.graph.edges[paths[i][j], paths[i][j+1]].dist for j in range(len(paths[i])-1)])
+
+				# Calculate time slot
+				start_time = slots[i][0][0]
+				end_time = slots[i][-1][0] + slots[i][-1][1]
+				cost = (end_time - start_time).total_seconds()
+
+				# Update task
+				task_dict = {'estimated_start_time': start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(cost)}
+				comm.sql_update_task(task['id'], task_dict)
+
+				# Update local task list dist and cost
+				self.agv.local_task_list_estimated_dist[sequence[i]['id']] = dist
+				self.agv.local_task_list_estimated_cost[sequence[i]['id']] = cost
+
+			# Update
+			self.agv.local_task_list_estimated_end_time = end_time
 
 	def dmas(self, start, dest, start_time, comm):
 

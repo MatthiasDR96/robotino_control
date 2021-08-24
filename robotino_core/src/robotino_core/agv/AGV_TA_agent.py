@@ -219,15 +219,8 @@ class TA_agent:
 		# Calculate new cost
 		new_cost = sum(costs)
 
-		print("Compute bid")
-		print("Start node: " + str(start_node))
-		print("Local task list" + str([task['node'] for task in new_local_task_list])) 
-		print("Sequence: " + str([task['node'] for task in sequence])) 
-		print("Current cost: " + str(self.agv.local_task_list_estimated_cost))
-		print("New cost: " + str(new_cost))
-
 		# Marginal cost to execute task
-		min_sum = new_cost - self.agv.local_task_list_estimated_cost
+		min_sum = new_cost - sum(self.agv.local_task_list_estimated_cost)
 		min_max = new_cost
 
 		# Compute start, end and duration

@@ -68,8 +68,27 @@ duration = end_time - start_time
 # Results
 print("Curent task sequence: " + str(current_solution['sequence']))
 print("Curent task paths: " + str(current_solution['paths']))
-print("Curent task slots: " + str(current_solution['slots']))
-print("Curent task dists: " + str(current_solution['dists']))
+
+print("\nCurent task slots: " + str(current_solution['slots']))
+
+for slots in current_solution['slots']:
+    print()
+    for slot in slots:
+        print(slot)
+
+new_slots = copy(current_solution['slots'])
+prev_slot = (current_solution['slots'][0][0][0], timedelta())
+for i in range(len(current_solution['slots'])):
+    for j in range(len(current_solution['slots'][i])):
+        new_slots[i][j] = (prev_slot[0] + prev_slot[1], current_solution['slots'][i][j][1])
+        prev_slot = (prev_slot[0] + prev_slot[1], current_solution['slots'][i][j][1])
+    
+for slots in new_slots:
+    print()
+    for slot in slots:
+        print(slot)
+        
+print("\nCurent task dists: " + str(current_solution['dists']))
 print("Curent task costs: " + str(current_solution['costs']))
 print("New task sequence: " + str(new_solution['sequence']))
 print("New task paths: " + str(new_solution['paths']))
