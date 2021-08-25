@@ -57,14 +57,15 @@ class RO_agent:
 			local_task_list = self.comm_homing.sql_get_local_task_list(self.agv.id)
 
 			# If database alive
-			if not local_task_list is None:
+			if local_task_list is None:
+				continue
 
-				# Add homing task if all work is done
-				if len(local_task_list) == 0 and self.agv.task_executing['id'] == -1 and not self.agv.node == self.agv.depot:
+			# Add homing task
+			if not self.agv.node == self.agv.depot and len([task for task in local_task_list if task['message'] == 'homing']) == 0 and not self.agv.task_executing['message'] == 'homing':
 
-					# Add task to task list
-					task_dict = {"node": self.agv.depot, "priority": 1, "robot": self.agv.id, "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'homing', "status": 'assigned', "approach": '-', 'task_bids': '-'}
-					self.comm_homing.sql_add_to_table('global_task_list', task_dict)
+				# Add task to task list
+				task_dict = {"node": self.agv.depot, "priority": 1, "robot": self.agv.id, "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'homing', "status": 'assigned', "approach": '-', 'task_bids': '-'}
+				self.comm_homing.sql_add_to_table('global_task_list', task_dict)
 
 			# Close thread at close event 
 			if stop():
@@ -124,10 +125,10 @@ class RO_agent:
 		progress = round(((cost - cost_to_be_done) / cost) * 100 if not cost == 0.0 else 0.0)
 
 		# Save attributes
-		self.traveled_cost = (datetime.now() - self.agv.start_time).total_seconds()
-		self.task_executing_estimated_dist = dist
-		self.task_executing_estimated_cost = cost_to_be_done
-		self.task_executing_estimated_end_time = end_time
+		self.agv.traveled_cost = (datetime.now() - self.agv.start_time).total_seconds()
+		self.agv.task_executing_estimated_dist = dist
+		self.agv.task_executing_estimated_cost = cost_to_be_done
+		self.agv.task_executing_estimated_end_time = end_time
 
 		# Update executing task
 		task_dict = {'progress': progress, 'estimated_start_time': self.agv.task_executing_start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(cost)}
@@ -144,6 +145,10 @@ class RO_agent:
 
 		# Get tasks in local task list
 		local_task_list = comm.sql_get_local_task_list(self.agv.id)
+		homing_task = None
+		if not len([task for task in local_task_list if task['message'] == 'homing']) == 0:
+			homing_task = [task for task in local_task_list if task['message'] == 'homing'][0]
+			local_task_list.remove(homing_task)
 
 		# Do dmas untill successful reservation
 		res = False
@@ -154,11 +159,19 @@ class RO_agent:
 
 			# Adapt slots to be correct
 			new_slots = copy(slots)
-			prev_slot = (slots[0][0][0], timedelta()) if len(slots) > 0 else ()
+			prev_slot = (slots[0][0][0], timedelta()) if len(slots) > 0 else (self.agv.task_executing_estimated_end_time, timedelta())
 			for i in range(len(slots)):
 				for j in range(len(slots[i])):
 					new_slots[i][j] = (prev_slot[0] + prev_slot[1], slots[i][j][1])
 					prev_slot = (prev_slot[0] + prev_slot[1], slots[i][j][1])
+
+			# Add homing taks
+			if homing_task is not None:
+				start_node = sequence[-1] if len(sequence) > 0 else self.agv.task_executing
+				sequence += [homing_task]
+				path, slots_, _, _ = self.dmas(start_node['node'], homing_task['node'], prev_slot[0] + prev_slot[1], comm)
+				paths.append(path)
+				slots.append(slots_)
 
 			# Create total path and slots
 			total_path = [item for sublist in paths for item in sublist]
@@ -178,12 +191,16 @@ class RO_agent:
 			res = self.intent(total_path, total_slots, comm)
 
 			# Set paths towards all tasks
-			end_time = self.task_executing_estimated_end_time
+			end_time = self.agv.task_executing_estimated_end_time
+			print()
+			print("Plan local task list")
 			for i in range(len(sequence)):
 
 				# Save paths and slots
 				self.agv.reserved_paths[sequence[i]['id']] = paths[i]
 				self.agv.reserved_slots[sequence[i]['id']] = slots[i]
+
+				print(paths[i])
 
 				# Calculate distance
 				dist = sum([self.agv.graph.edges[paths[i][j], paths[i][j+1]].dist for j in range(len(paths[i])-1)])
@@ -192,6 +209,8 @@ class RO_agent:
 				start_time = slots[i][0][0]
 				end_time = slots[i][-1][0] + slots[i][-1][1]
 				cost = (end_time - start_time).total_seconds()
+
+				print(cost)
 
 				# Update task
 				task_dict = {'estimated_start_time': start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(cost)}

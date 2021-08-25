@@ -2,10 +2,10 @@ robot_speed: 1
 task_execution_time: 0
 collision_threshold: 0.5
 battery_threshold: 20
-max_charging_time: 3600
 max_tasks_in_task_list: 5
 epsilon: 0.5
 initial_resources: 100
+resource_scale_factor: 0.5
 
 routing: True
 dmas_rate: 1

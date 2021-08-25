@@ -1,3 +1,4 @@
+from math import cos
 import time
 
 
@@ -26,18 +27,19 @@ class Action:
             y = tmp_y + i/10 * (node_position[1] - tmp_y)
 
             # Get distance
-            distance = self.agv.calculate_euclidean_distance((self.agv.x_loc, self.agv.y_loc), (x, y))
+            dist = self.agv.calculate_euclidean_distance((self.agv.x_loc, self.agv.y_loc), (x, y))
 
             # Sleep
-            time.sleep((distance/self.agv.params['robot_speed']))
+            cost = dist / self.agv.params['robot_speed']
+            time.sleep(cost)
 
             # Update location
             self.agv.x_loc = float(x)
             self.agv.y_loc = float(y)
-            self.agv.traveled_dist += distance
+            self.agv.traveled_dist += dist
 
             # Update battery status
-            self.agv.battery_status = self.agv.battery_status - 1
+            self.agv.battery_status = self.agv.battery_status - cost * self.agv.params['resource_scale_factor']
 
         # Update status at node
         self.agv.node = node
