@@ -130,10 +130,7 @@ class Edge:
     def __init__(self, start_node, end_node, length, pheromone=0.1):
         self.start_node = start_node
         self.end_node = end_node
-        self.nodes_in_between = []
-        self.slots_in_between = []
-        self.dist = length
-        self.cost = length
+        self.length = length
         self.pheromone = pheromone
 
     def __str__(self):

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 import sys
-from robotino_core.agv.AGV_Main import AGV_Main
+import rospy
+from robotino_core.agv.AGV_ROS import AGV_ROS
 
 if __name__== '__main__':
 
@@ -17,6 +18,8 @@ if __name__== '__main__':
 		ro_agent = True
 		rm_agent = False
 
-	# Start AGV
+	# Start AGV ROS
+	rospy.init_node("robotino_" + str(id))
 	params_file = 'setup' + str(id) + '.yaml'
-	agv = AGV_Main(params_file, ta_agent, ro_agent, rm_agent)
+	AGV_ROS(params_file, ta_agent, ro_agent, rm_agent)
+	rospy.spin()

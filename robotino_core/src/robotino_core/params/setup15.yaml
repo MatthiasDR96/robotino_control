@@ -1,0 +1,23 @@
+ip: 'localhost'
+port: 10015
+host: 'localhost'
+user: 'matthias'
+password: 'matthias'
+database: 'kb'
+
+id: 15
+depot: 'pos_1'
+
+robot_speed: 1
+collision_threshold: 0.5
+battery_threshold: 20
+epsilon: 0.5
+resource_scale_factor: 1
+
+ro_rate: 1
+local_consensus_rate: 5
+depot_locations:
+    - pos_1
+    - pos_2
+    - pos_3
+

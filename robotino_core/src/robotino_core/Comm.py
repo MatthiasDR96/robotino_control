@@ -66,6 +66,7 @@ class Comm:
 				x_loc FLOAT,
 				y_loc FLOAT,
 				theta FLOAT,
+				speed FLOAT,
 				node VARCHAR(100),
 				status VARCHAR(100),
 				battery_status FLOAT,
@@ -74,16 +75,14 @@ class Comm:
 				traveled_dist FLOAT,
 				charged_time FLOAT,
 				congestions INT,
-				task_executing INT,
-				moving_to VARCHAR(100),
-				path VARCHAR(100),
+				next_node VARCHAR(100),
+				current_path LONGTEXT,
 				total_path LONGTEXT,
-				time_now VARCHAR(100),
-				task_executing_estimated_cost FLOAT,
-				task_executing_estimated_dist FLOAT,
-				local_task_list_estimated_cost FLOAT,
-				local_task_list_estimated_dist FLOAT,
-				local_task_list_end_time  VARCHAR(100)
+				task_executing_dist FLOAT,
+				task_executing_cost FLOAT,
+				local_task_list_dist FLOAT,
+				local_task_list_cost FLOAT,
+				time_now VARCHAR(100)
 		)
 		""".format(name)
 		self.cursor.execute(sql)
@@ -105,7 +104,11 @@ class Comm:
 				progress FLOAT,
 				message VARCHAR(100),
 				status VARCHAR(100),
-				approach VARCHAR(100)
+				approach VARCHAR(100),
+				path LONGTEXT,
+				slots LONGTEXT,
+				dist FLOAT,
+				cost FLOAT
 		)
 		"""
 		self.cursor.execute(sql)
@@ -118,6 +121,7 @@ class Comm:
 				name VARCHAR(100),
 				x_loc FLOAT,
 				y_loc FLOAT,
+				theta FLOAT,
 				neighbors VARCHAR(100)
 		)
 		"""
@@ -153,13 +157,13 @@ class Comm:
 		values = ', '.join(["%s"]*len(item.values()))
 		sql = 'INSERT IGNORE INTO {} ({fields}) VALUES ({values})'.format(table, fields=fields, values=values)
 		val = tuple(item.values())
-		try:
-			self.cursor.execute(sql, val)
-			self.conn.commit()
-			return self.cursor.lastrowid
-		except:
-			print("Database not alive1")
-			return None
+		#try:
+		self.cursor.execute(sql, val)
+		self.conn.commit()
+		return self.cursor.lastrowid
+		#except:
+			#print("Database not alive1")
+			#return None
 
 	def sql_select_reservations(self, table, node, id):
 		assert isinstance(table, str)
@@ -202,6 +206,20 @@ class Comm:
 			print("Database not alive " + str(table))	
 			return None
 
+	def sql_get_robot(self, robot_id):
+		assert isinstance(robot_id, int)
+		sql = "SELECT * FROM global_robot_list WHERE id = %s"
+		val = (robot_id,)
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql, val)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive4")	
+			return None
+
+
 	def sql_get_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
 		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'assigned' ORDER BY priority"
@@ -229,14 +247,18 @@ class Comm:
 			return None
 
 	def get_graph(self):
-		items = self.sql_select_everything_from_table('graph')
-		graph = Graph()
-		node_names = list(map(itemgetter('name'), items))
-		node_locations = np.hstack((np.c_[list(map(itemgetter('x_loc'), items))], np.c_[list(map(itemgetter('y_loc'), items))]))
-		node_neighbors = [ast.literal_eval(x) for x in list(map(itemgetter('neighbors'), items))]
-		graph.create_nodes(node_locations, node_names)
-		graph.create_edges(node_names, node_neighbors)
-		return graph
+		try:
+			items = self.sql_select_everything_from_table('graph')
+			graph = Graph()
+			node_names = list(map(itemgetter('name'), items))
+			node_locations = np.hstack((np.c_[list(map(itemgetter('x_loc'), items))], np.c_[list(map(itemgetter('y_loc'), items))], np.c_[list(map(itemgetter('theta'), items))]))
+			node_neighbors = [ast.literal_eval(x) for x in list(map(itemgetter('neighbors'), items))]
+			graph.create_nodes(node_locations, node_names)
+			graph.create_edges(node_names, node_neighbors)
+			return graph
+		except:
+			print("Database not alive6")	
+			return None
 
 	def sql_delete_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
@@ -288,6 +310,7 @@ class Comm:
 					x_loc = %s,
 					y_loc = %s,
 					theta = %s,
+					speed = %s,
 					node = %s,
 					status = %s,
 					battery_status = %s,
@@ -296,16 +319,14 @@ class Comm:
 					traveled_dist = %s, 
 					charged_time = %s,
 					congestions = %s,
-					task_executing = %s,
-					moving_to = %s,
-					path = %s,
+					next_node = %s,
+					current_path = %s,
 					total_path = %s,
-					time_now = %s,
-					task_executing_estimated_cost = %s,
-					task_executing_estimated_dist = %s,
-					local_task_list_estimated_cost = %s,
-					local_task_list_estimated_dist = %s,
-					local_task_list_end_time = %s
+					task_executing_dist = %s,
+					task_executing_cost = %s,
+					local_task_list_dist = %s,
+					local_task_list_cost = %s,
+					time_now = %s
 				WHERE
 					id = {}
 				""".format(id)
@@ -317,6 +338,29 @@ class Comm:
 			return True
 		except:
 			print("Database not alive9")	
+			return False
+
+	def sql_update_robot2(self, id, robot):
+		assert isinstance(id, int)
+		assert isinstance(robot, dict)
+		sql = """UPDATE 
+					global_robot_list 
+				SET
+			"""
+		for key in robot.keys():
+			sql += key + '= %s,'
+		sql = sql[:-1]
+		sql += """
+				WHERE 
+					id = {}
+				""".format(id)
+		val = tuple(robot.values())
+		try:
+			self.cursor.execute(sql, val)
+			self.conn.commit()
+			return True
+		except:
+			print("Database not alive10")	
 			return False
 
 	def sql_update_task(self, id, task):
@@ -359,7 +403,9 @@ class Comm:
 					message = %s,
 					status = %s, 
 					approach = %s,
-					task_bids = %s
+					task_bids = %s,
+					path = %s,
+					slots = %s,
 				WHERE 
 					id = %s
 				"""

@@ -6,6 +6,7 @@ import pandas as pd
 
 
 def genetic_algorithm(objective_function, nvars, algorithm_params):
+    
     # Initialize population
     npop = algorithm_params['population_size']
     pop = initial_population(nvars, npop)

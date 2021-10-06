@@ -1,25 +1,34 @@
 from datetime import datetime, timedelta
 import time
-import numpy as np
+import os
+import yaml
 
-from robotino_core.solvers.feasibility_ant_solver import *
 from robotino_core.Comm import Comm
+from robotino_core.solvers.astar_solver import *
+from robotino_core.solvers.tsp_solver import *
+from robotino_core.solvers.dmas_solver import *
 
-class RO_agent:
+
+class AGV_RO_agent:
+
 	"""
 			A class containing the intelligence of the Routing agent
 	"""
 
-	def __init__(self, agv):
+	def __init__(self, params_file):
 
-		# AGV
-		self.agv = agv
+		# Read params
+		this_dir = os.path.dirname(os.path.dirname(__file__))
+		data_path = os.path.join(this_dir, "params", params_file)
+		with open(data_path, 'r') as file:
+			self.params = yaml.load(file, Loader=yaml.FullLoader)
 
 		# Init database communication
-		self.comm_main = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
+		self.comm_main = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
 		self.comm_main.sql_open()
-		self.comm_homing = Comm(self.agv.ip, self.agv.port, self.agv.host, self.agv.user, self.agv.password, self.agv.database)
-		self.comm_homing.sql_open()
+
+		# Attribute
+		self.task_executing_end_time = 0
 
 	def main(self, _, stop):
 		
@@ -28,362 +37,137 @@ class RO_agent:
 		while True:
 
 			# Timeout
-			time.sleep(self.agv.params['dmas_rate'])
+			time.sleep(self.params['ro_rate'])
 
-			# Plan if there are tasks
-			if not self.agv.task_executing['id'] == -1:
+			# Plan and evaluate path and slots towards executing task
+			self.plan_executing_task()
 
-				# Plan path and slots towards executing task
-				self.plan_executing_task(self.comm_main)
-
-			# Plan if there are tasks
-			if not self.agv.task_executing['id'] == -1:
-
-				# Plan path and slots towards local tasks
-				self.plan_local_tasks(self.comm_main)
+			# Plan and evaluate path and slots towards local tasks
+			self.plan_local_tasks()
 
 			# Close thread at close event 
 			if stop():
 				print("RO-agent:	Main thread killed")
 				break
 
-	def homing(self, _, stop):
+	def plan_executing_task(self):
 
-		# Loop
-		print("RO-agent:	Homing thread started")
-		while True:
+		# Get robot
+		robot = self.comm_main.sql_get_robot(self.params['id'])
+		if robot is None or len(robot) == 0: return False
+		robot = robot[0]
 
-			# Get tasks in local task list
-			local_task_list = self.comm_homing.sql_get_local_task_list(self.agv.id)
+		# Get task executing
+		task_executing = self.comm_main.sql_get_executing_task(robot['id'])
+		if task_executing is None or len(task_executing) == 0: return False
+		task_executing = task_executing[0]
 
-			# If database alive
-			if local_task_list is None:
-				continue
+		# Get graph
+		graph = self.comm_main.get_graph()
+		if graph is None: return False
 
-			# Add homing task
-			if not self.agv.node == self.agv.depot and len([task for task in local_task_list if task['message'] == 'homing']) == 0 and not self.agv.task_executing['message'] == 'homing':
+		# Calculate dist and cost to next node
+		dist_to_next = self.dist_euclidean((robot['x_loc'], robot['y_loc']), graph.nodes[robot['next_node']].pos)
+		cost_to_next = dist_to_next / robot['speed']
 
-				# Add task to task list
-				task_dict = {"node": self.agv.depot, "priority": 1, "robot": self.agv.id, "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'homing', "status": 'assigned', "approach": '-', 'task_bids': '-'}
-				self.comm_homing.sql_add_to_table('global_task_list', task_dict)
-
-			# Close thread at close event 
-			if stop():
-				print("RO-agent:	Homing thread killed")
-				break
-
-
-	def plan_executing_task(self, comm):
-
-		# Assertions
-		assert isinstance(comm, Comm)
-
-		# Init
-		start_node = self.agv.current_node
-		start_time = datetime.now() + timedelta(seconds=self.agv.calculate_euclidean_distance((self.agv.x_loc, self.agv.y_loc), self.agv.graph.nodes[self.agv.current_node].pos) / self.agv.params['robot_speed'])
-
-		# If end node not reached
-		if not start_node == self.agv.task_executing['node']:
-
-			# Do dmas untill successful reservation
-			res = False
-			while not res:
-
-				# Do dmas
-				best_path, best_slots, _, _ = self.dmas(start_node, self.agv.task_executing['node'], start_time, comm)
-
-				# Reserve slots
-				res = self.intent(best_path, best_slots, comm)
-
-				# Set paths towards all tasks
-				self.agv.reserved_paths[self.agv.task_executing['id']] = best_path
-				self.agv.reserved_slots[self.agv.task_executing['id']] = best_slots
-
-		else:
-
-			# Set paths towards all tasks
-			self.agv.reserved_paths[self.agv.task_executing['id']] = []
-			self.agv.reserved_slots[self.agv.task_executing['id']] = [(start_time, timedelta())]
-
-		# Get path and slots
-		path = self.agv.reserved_paths[self.agv.task_executing['id']]
-		slots = self.agv.reserved_slots[self.agv.task_executing['id']]
-		
-		# Calculate distance
-		dist = self.agv.calculate_euclidean_distance((self.agv.x_loc, self.agv.y_loc), self.agv.graph.nodes[self.agv.current_node].pos)
-		dist += sum([self.agv.graph.edges[path[i], path[i+1]].dist for i in range(len(path)-1)]) 
-					
-		# Calculate end time
-		end_time = slots[-1][0] + slots[-1][1]
-
-		# Calculate time slot
-		start_time = self.agv.task_executing_start_time
-		cost = (end_time - start_time).total_seconds()
-					
-		# Calculate progres
-		cost_to_be_done = (end_time - datetime.now()).total_seconds()
-		progress = round(((cost - cost_to_be_done) / cost) * 100 if not cost == 0.0 else 0.0)
-
-		# Save attributes
-		self.agv.traveled_cost = (datetime.now() - self.agv.start_time).total_seconds()
-		self.agv.task_executing_estimated_dist = dist
-		self.agv.task_executing_estimated_cost = cost_to_be_done
-		self.agv.task_executing_estimated_end_time = end_time
-
-		# Update executing task
-		task_dict = {'progress': progress, 'estimated_start_time': self.agv.task_executing_start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(cost)}
-		comm.sql_update_task(self.agv.task_executing['id'], task_dict)
-
-	def plan_local_tasks(self, comm):
-
-		# Assertions
-		assert isinstance(comm, Comm)
-
-		# Init
-		start_node = self.agv.task_executing['node']
-		start_time = self.agv.reserved_slots[self.agv.task_executing['id']][-1][0] + self.agv.reserved_slots[self.agv.task_executing['id']][-1][1]
-
-		# Get tasks in local task list
-		local_task_list = comm.sql_get_local_task_list(self.agv.id)
-		homing_task = None
-		if not len([task for task in local_task_list if task['message'] == 'homing']) == 0:
-			homing_task = [task for task in local_task_list if task['message'] == 'homing'][0]
-			local_task_list.remove(homing_task)
+		# Start situation
+		start_node = robot['next_node']
+		start_time = datetime.now() + timedelta(seconds=cost_to_next)
 
 		# Do dmas untill successful reservation
-		res = False
-		while not res:
+		while True:
 
-			# Update local_task_list
-			sequence, paths, slots, _, _ = self.agv.tsp_dmas(start_node, start_time, local_task_list, comm)
+			# Do dmas
+			path, slots, dist, cost = dmas(start_node, task_executing['node'], start_time, graph, robot['id'], robot['speed'], self.comm_main)
 
-			# Adapt slots to be correct
-			new_slots = copy(slots)
-			prev_slot = (slots[0][0][0], timedelta()) if len(slots) > 0 else (self.agv.task_executing_estimated_end_time, timedelta())
-			for i in range(len(slots)):
-				for j in range(len(slots[i])):
-					new_slots[i][j] = (prev_slot[0] + prev_slot[1], slots[i][j][1])
-					prev_slot = (prev_slot[0] + prev_slot[1], slots[i][j][1])
-
-			# Add homing taks
-			if homing_task is not None:
-				start_node = sequence[-1] if len(sequence) > 0 else self.agv.task_executing
-				sequence += [homing_task]
-				path, slots_, _, _ = self.dmas(start_node['node'], homing_task['node'], prev_slot[0] + prev_slot[1], comm)
-				paths.append(path)
-				slots.append(slots_)
-
-			# Create total path and slots
-			total_path = [item for sublist in paths for item in sublist]
-			total_slots = [item for sublist in slots for item in sublist]
-
-			# Set paths towards all tasks
-			self.agv.total_path = total_path
-
-			# Update local_task_list sequence
-			priority = 1
-			for task in sequence:
-				task_dict = {'priority': priority}
-				comm.sql_update_task(task['id'], task_dict)
-				priority += 1
+			# Add charging time 
+			if task_executing['message'] == 'charging':
+				slots[-1] = (slots[-1][0], slots[-1][1] + timedelta(seconds=0)) # TODO add charging time
 
 			# Reserve slots
-			res = self.intent(total_path, total_slots, comm)
+			res = intent(path, slots, robot['id'], self.comm_main)
 
-			# Set paths towards all tasks
-			end_time = self.agv.task_executing_estimated_end_time
-			print()
-			print("Plan local task list")
-			for i in range(len(sequence)):
+			# End criterium
+			if res: break
 
-				# Save paths and slots
-				self.agv.reserved_paths[sequence[i]['id']] = paths[i]
-				self.agv.reserved_slots[sequence[i]['id']] = slots[i]
+		# Update executing task
+		self.task_executing_end_time = slots[-1][0] + slots[-1][1]
+		duration = (self.task_executing_end_time - start_time).total_seconds()
+		task_dict = {'estimated_end_time': self.task_executing_end_time.strftime('%H:%M:%S'), 'estimated_duration': str(duration), 'path': str(path), 'slots':str(slots), 'dist': dist, 'cost': cost}
+		res = self.comm_main.sql_update_task(task_executing['id'], task_dict)
 
-				print(paths[i])
+	def plan_local_tasks(self):
 
-				# Calculate distance
-				dist = sum([self.agv.graph.edges[paths[i][j], paths[i][j+1]].dist for j in range(len(paths[i])-1)])
+		# Get robot
+		robot = self.comm_main.sql_get_robot(self.params['id'])
+		if robot is None or len(robot) == 0: return False
+		robot = robot[0]
 
-				# Calculate time slot
-				start_time = slots[i][0][0]
-				end_time = slots[i][-1][0] + slots[i][-1][1]
-				cost = (end_time - start_time).total_seconds()
+		# Get task executing
+		task_executing = self.comm_main.sql_get_executing_task(robot['id'])
+		if task_executing is None or len(task_executing) == 0: return False
+		task_executing = task_executing[0]
 
-				print(cost)
+		# Get graph
+		self.graph = self.comm_main.get_graph()
+		if self.graph is None: return False
 
-				# Update task
-				task_dict = {'estimated_start_time': start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(cost)}
-				comm.sql_update_task(task['id'], task_dict)
+		# Get tasks in local task list
+		local_task_list = self.comm_main.sql_get_local_task_list(robot['id'])
+		if local_task_list is None or len(local_task_list) == 0: return False
 
-				# Update local task list dist and cost
-				self.agv.local_task_list_estimated_dist[sequence[i]['id']] = dist
-				self.agv.local_task_list_estimated_cost[sequence[i]['id']] = cost
+		# Start situation
+		start_node = task_executing['node']
+		start_time = self.task_executing_end_time
 
-			# Update
-			self.agv.local_task_list_estimated_end_time = end_time
+		# Extract only node names from tasks without homing task or charging task
+		# homing = [task for task in local_task_list if task['message'] == 'homing']
+		# charging = [task for task in local_task_list if task['message'] == 'charging']
+		# nodes_to_visit = [task['node'] for task in local_task_list if not task['message'] == 'homing' and not task['message'] == 'charging']
 
-	def dmas(self, start, dest, start_time, comm):
+		# Do tsp using astar routing
+		# solution = tsp(start_node, nodes_to_visit, self.dist_astar)
 
-		# Assertions
-		assert isinstance(start, str)
-		assert isinstance(dest, str)
-		assert isinstance(start_time, datetime)
-		assert isinstance(comm, Comm)
+		# Convert task node names back to tasks including homing task
+		# sequence = [local_task_list[nodes_to_visit.index(name)] for name in solution['sequence']] + homing
 
-		# Feasibility ants
-		feasible_paths, _ = get_alternative_paths(self.agv.graph, start, dest, 5)
+		# Plan routes for all tasks
+		priority = 1
+		for task in local_task_list:
 
-		# Exploration ants
-		fitness_values, slots, dists, costs = self.explore(feasible_paths, start_time, comm)
+			# Do dmas untill successful reservation
+			while True:
 
-		# Best route selection
-		best_path = feasible_paths[int(np.argmin(fitness_values))]
-		best_slots = slots[int(np.argmin(fitness_values))]
-		best_dist = dists[int(np.argmin(fitness_values))]
-		best_cost = costs[int(np.argmin(fitness_values))]
+				# Update local_task_list
+				path, slots, dist, cost = dmas(start_node, task['node'], start_time, self.graph, robot['id'], robot['speed'], self.comm_main)
 
-		return best_path[1:], best_slots, best_dist, best_cost
+				# Add charging time 
+				if task_executing['message'] == 'charging':
+					slots[-1] = (slots[-1][0], slots[-1][1] + timedelta(seconds=0)) # TODO add charging time
 
-	def explore(self, paths, start_time, comm):
+				# Reserve slots
+				res = intent(path, slots, robot['id'], self.comm_main)
 
-		# Assertions
-		assert isinstance(paths, list)
-		assert isinstance(start_time, datetime)
-		assert isinstance(comm, Comm)
+				# End criterium
+				if res: break
 
-		# Init
-		fitness_values = []
-		total_dists = []
-		total_costs = []
-		all_slots = []
+			# Update task
+			end_time = slots[-1][0] + slots[-1][1]
+			duration = (end_time - start_time).total_seconds()
+			task_dict = {'priority': priority, 'estimated_start_time': start_time.strftime('%H:%M:%S'), 'estimated_end_time': end_time.strftime('%H:%M:%S'), 'estimated_duration': str(duration), 'path': str(path), 'slots':str(slots), 'dist': dist, 'cost': cost}
+			res = self.comm_main.sql_update_task(task['id'], task_dict)		
 
-		# Explore paths
-		for path in paths:
+			# Update state
+			start_node = task['node']
+			start_time = end_time
+			priority += 1	
 
-			# Init
-			timestamp = start_time
-			total_dist = 0.0
-			total_cost = 0.0
-			slots = []
+	def dist_astar(self, a, b):
+		assert isinstance(a, str)
+		assert isinstance(b, str)
+		return get_shortest_path(self.graph, a, b)
 
-			# Calculate slot of nodes in between
-			for i in range(0, len(path) - 1):
+	@staticmethod
+	def dist_euclidean(a, b):
+		return math.sqrt(math.pow(b[0] - a[0], 2) + math.pow(b[1] - a[1], 2))
 
-				# Calculate dist and traveltime to drive to node i+1
-				dist = self.agv.graph.edges[path[i], path[i + 1]].dist
-				travel_time = timedelta(seconds= dist / self.agv.params['robot_speed'])
-
-				# Get wanted slot
-				wanted_slot = (timestamp, travel_time)
-
-				# Check available slots for node i+1
-				slot, delay = self.check_slot(path[i+1], wanted_slot, comm)
-				
-				# Calculate edge cost
-				cost = travel_time.total_seconds() + delay.total_seconds()
-
-				# Append slot and update state
-				timestamp += travel_time + delay
-				total_dist += dist
-				total_cost += cost
-				slots.append(slot)
-
-			# Collect results
-			fitness_values.append(timestamp)
-			total_dists.append(total_dist)
-			total_costs.append(total_cost)
-			all_slots.append(slots)
-
-		return fitness_values, all_slots, total_dists, total_costs
-
-	def intent(self, path, slots, comm):
-
-		# Assertions
-		assert isinstance(path, list)
-		assert isinstance(slots, list)
-		assert isinstance(comm, Comm)
-
-		# Intent
-		for i in range(len(path)):
-			result = self.reserve_slot(path[i], slots[i], comm)
-			if not result:
-				return False
-		return True
-			
-	def check_slot(self, node, slot, comm):
-
-		# Assertions
-		assert isinstance(node, str)
-		assert isinstance(slot[0], datetime)
-		assert isinstance(slot[1], timedelta)
-		assert isinstance(comm, Comm)
-
-		# Get slot information
-		reservation_time = slot[0]
-		duration = slot[1]
-
-		# Get all reservations
-		reservations = comm.sql_select_reservations('environmental_agents', node,  self.agv.id)
-
-		# Get all reservations from the requested reservation_time for all other robots
-		slots = []
-		for res in reservations:
-			start_time = datetime.strptime(res['start_time'], '%Y-%m-%d %H:%M:%S')
-			end_time = datetime.strptime(res['end_time'], '%Y-%m-%d %H:%M:%S')
-			if end_time > reservation_time:
-				slots.append((start_time, end_time))
-
-		# Get free slots
-		free_slots = []
-		if slots:
-			# Free slot from requested reservation time till start time of eariest reservation
-			if slots[0][0] - reservation_time >= duration:
-				free_slots.append((reservation_time, slots[0][0]))
-			# Free intermediate slots
-			for start, end in ((slots[i][1], slots[i + 1][0]) for i in range(len(slots) - 1)):
-				if end - start >= duration:
-					free_slots.append((start, end - start))
-			# Free slot from last reservation time till infinity
-			free_slots.append((slots[-1][1], float('inf')))
-		else:
-			free_slots.append((reservation_time, float('inf')))
-
-		# Take first available slot and adapt the end time to the required end time
-		first_available_slot = free_slots[0]
-		first_available_slot = (first_available_slot[0], slot[1])
-
-		# Compute delay
-		delay = first_available_slot[0] - slot[0]
-		return first_available_slot, delay
-
-	def reserve_slot(self, node, slot, comm):
-
-		# Assertions
-		assert isinstance(node, str)
-		assert isinstance(slot[0], datetime)
-		assert isinstance(slot[1], timedelta)
-		assert isinstance(comm, Comm)
-
-		# Get slot
-		reservation_start_time = slot[0]
-		reservation_end_time = reservation_start_time + slot[1]
-
-		# Get all reservations
-		reservations = comm.sql_select_reservations('environmental_agents', node,  self.agv.id)
-		
-		# Check if reservation is valid before reserving
-		valid = True
-		for res in reservations:
-			start_time = datetime.strptime(res['start_time'], '%Y-%m-%d %H:%M:%S')
-			end_time = datetime.strptime(res['end_time'], '%Y-%m-%d %H:%M:%S')
-			if (reservation_start_time < start_time < reservation_end_time) or (reservation_start_time < end_time < reservation_end_time) or (start_time < reservation_start_time and end_time > reservation_end_time):
-				valid = False
-				break
-		if valid:
-			reservation_dict = {'node': node, 'robot': self.agv.id, 'start_time': reservation_start_time.strftime('%Y-%m-%d %H:%M:%S'), 'end_time': reservation_end_time.strftime('%Y-%m-%d %H:%M:%S'), 'pheromone': 100.0}
-			comm.sql_add_to_table('environmental_agents', reservation_dict)
-			return True
-		else:
-			print("Could not add slot (" + str(reservation_start_time) + ', ' + str(reservation_end_time) + ") of agv " + str(self.agv.id))
-			return False

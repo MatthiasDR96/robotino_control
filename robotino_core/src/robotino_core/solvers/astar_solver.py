@@ -115,7 +115,7 @@ def get_shortest_path(graph, start_node, end_node):
             distance = 0
             while current.parent:
                 path.append(current.name)
-                distance += graph.edges[current.parent.name, current.name].dist
+                distance += graph.edges[current.parent.name, current.name].length
                 current = current.parent
             path.append(current.name)
             return path[::-1], distance
@@ -135,7 +135,7 @@ def get_shortest_path(graph, start_node, end_node):
                 continue 
 
             # Compute new cost to neighbor
-            new_g = current.g + graph.edges[current.name, neighbor.name].dist + graph.edges[current.name, neighbor.name].pheromone # math.sqrt(math.pow(self.pos[0] - node.pos[0], 2) + math.pow(self.pos[1] - node.pos[1], 2))
+            new_g = current.g + graph.edges[current.name, neighbor.name].length + graph.edges[current.name, neighbor.name].pheromone # math.sqrt(math.pow(self.pos[0] - node.pos[0], 2) + math.pow(self.pos[1] - node.pos[1], 2))
         
             # If neighbor in open set, update cost if lower than before
             if neighbor in openset :
