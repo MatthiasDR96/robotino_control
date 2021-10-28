@@ -1,8 +1,8 @@
-ip: 'localhost'
+ip: '127.0.0.1'
 port: 10015
-host: 'localhost'
-user: 'matthias'
-password: 'matthias'
+host: '127.0.0.1'
+user: 'FleetManager'
+password: 'FleetManager'
 database: 'kb'
 
 id: 15
