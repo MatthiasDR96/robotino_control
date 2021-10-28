@@ -6,15 +6,12 @@ password: 'matthias'
 database: 'kb'
 
 id: 17
-depot: 'pos_3'
+depot: 'pos_8'
 
 robot_speed: 1
-task_execution_time: 0
 collision_threshold: 0.5
 battery_threshold: 20
-max_tasks_in_task_list: 5
-epsilon: 0.5
-initial_resources: 100
+epsilon: 1.0
 resource_scale_factor: 1
 
 ro_rate: 1

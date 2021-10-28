@@ -6,12 +6,12 @@ password: 'matthias'
 database: 'kb'
 
 id: 15
-depot: 'pos_1'
+depot: 'pos_2'
 
 robot_speed: 1
 collision_threshold: 0.5
 battery_threshold: 20
-epsilon: 0.5
+epsilon: 1.0
 resource_scale_factor: 1
 
 ro_rate: 1

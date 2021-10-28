@@ -1,6 +1,7 @@
 import time
 import os 
 import yaml
+import threading
 
 from robotino_core.Comm import Comm
 from robotino_core.solvers.astar_solver import *
@@ -24,6 +25,18 @@ class AGV_RM_agent:
 		self.comm_main.sql_open()
 		self.comm_threshold_charging = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
 		self.comm_threshold_charging.sql_open()
+
+		# Exit event
+		self.exit_event = threading.Event()
+
+		# Processes
+		self.threads = []
+		#self.threads.append(threading.Thread(target=rm_agent.main, args=(11, lambda: self.stop_threads)))
+
+	def signal_handler(self, _, __):
+		print("\n\nShutdown robot without communication possibilities")
+		self.stop_threads = True
+		#exit(0)
 
 	def main(self, _, stop):
 

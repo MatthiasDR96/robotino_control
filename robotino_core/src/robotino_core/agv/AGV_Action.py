@@ -44,7 +44,7 @@ class AGV_Action:
         return True
 
     def pick(self):
-        print("Agv " + str(self.agv.id) + ":        Picked item ")
+        print("Agv " + str(self.agv.id) + ":         Picked item ")
 
     def place(self):
-        print("Agv " + str(self.agv.id) + ":        Placed item ")
+        print("Agv " + str(self.agv.id) + ":         Placed item ")

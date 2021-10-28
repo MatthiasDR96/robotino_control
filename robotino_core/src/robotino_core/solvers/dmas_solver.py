@@ -1,24 +1,65 @@
 from datetime import datetime, timedelta
 import numpy as np
 
-from robotino_core.solvers.feasibility_ant_solver import *
+from robotino_core.solvers.tsp_solver import tsp
+from robotino_core.solvers.astar_solver import get_shortest_path
+from robotino_core.solvers.astar_solver import get_alternative_paths
 from robotino_core.Comm import Comm
 
-def dmas(start_node, node_to_visit, start_time, graph, id, speed, comm):
+def dmas(start_node, nodes_to_visit, start_time, graph, id, speed, comm):
+
+	"""
+        Implements the dmas algorithm to find the best of a set of alternative routes with available slots. The set of feasible routes contains the 
+		shortest A* path to the destination node or the shortest A* path through multiple destination nodes. The set of feasible routes is augmented 
+		with alternative routes obtained by a ACO solver. 
+        Input:
+            - Start node name (str)
+            - Nodes to visit names (list)
+            - Start time (datetime)
+			- Graph
+			- Robot id (int)
+			- Robot speed (float)
+			- Number of required alternative paths
+			- Communication channel
+        Output:
+            - Best route (without starting node)
+            - Best slots (without starting node)
+            - Total distance in meters
+			- Total cost in seconds
+        Default output:
+            - []
+            - [(start_time, timedelta())]
+            - 0
+			- 0
+    """
 
 	# Assertions
 	assert isinstance(start_node, str)
-	assert isinstance(node_to_visit, str)
+	assert isinstance(nodes_to_visit, list)
 	assert isinstance(start_time, datetime)
 	assert isinstance(id, int)
 	assert isinstance(speed, float)
 	assert isinstance(comm, Comm)
 
+	# Init
+	feasible_paths = []
+
 	# If start and end are the same
-	if start_node == node_to_visit: return [], [(start_time, timedelta())], 0, 0
+	if start_node in nodes_to_visit: return [], [(start_time, timedelta())], 0, 0
+
+	# Define distance function
+	def dist_func(a, b):
+		path, dist = dist_astar(graph, a, b)
+		return path, dist
+
+	# Compute tsp solution
+	solution = tsp(start_node, nodes_to_visit, dist_func)
+	tsp_path = [start_node] + [item for sublist in solution['paths'] for item in sublist]
+	feasible_paths.append(tsp_path)
 
 	# Get alternative paths
-	_, local_best_solutions = get_alternative_paths(graph, start_node, [node_to_visit], 5)
+	_, local_best_solutions = get_alternative_paths(graph, start_node, nodes_to_visit[0], 2)
+	feasible_paths.extend(local_best_solutions)
 
 	# Exploration ants
 	fitness_values, slots, dists, costs = explore(local_best_solutions, start_time, graph, id, speed, comm)
@@ -188,3 +229,11 @@ def reserve_slot(node, slot, id, comm):
 	else:
 		print("Could not add slot (" + str(reservation_start_time) + ', ' + str(reservation_end_time) + ") of agv " + str(id))
 		return False
+
+def dist_astar(graph, start_node, end_node):
+	path, dist = get_shortest_path(graph, start_node, end_node)
+	return path[1:], dist
+
+def dist_euclidean(graph, start_node, end_node):
+	dist = np.linalg.norm(np.subtract(graph.nodes[start_node].pos, graph.nodes[end_node].pos))
+	return [], dist

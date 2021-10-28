@@ -1,5 +1,5 @@
 import math
-from random import random
+import random
 from copy import deepcopy
 
 def get_alternative_paths(graph, start, dest, n):
@@ -22,8 +22,6 @@ def get_alternative_paths(graph, start, dest, n):
     """
 
     # Assertions
-    assert isinstance(start, str)
-    assert isinstance(dest, str)
     assert isinstance(n, int)
 
     # Take deepcopy of graph
@@ -37,7 +35,7 @@ def get_alternative_paths(graph, start, dest, n):
     num_fails = 0
     max_fails = 100
     penalty = 1000
-    alpha = random()
+    alpha = random.random()
 
     # Loop
     while len(feasible_paths) < n and num_fails < max_fails:
@@ -55,7 +53,7 @@ def get_alternative_paths(graph, start, dest, n):
         
         # Penalize path
         for i in range(len(path)-1):
-            beta = random()
+            beta = random.random()
             if beta < alpha:
                 graph.edges[path[i], path[i+1]].pheromone += penalty
 
@@ -64,7 +62,7 @@ def get_alternative_paths(graph, start, dest, n):
     feasible_paths = [feasible_paths[i] for i in sorted_indices]
     feasible_distances = [feasible_distances[i] for i in sorted_indices]
 
-    return feasible_paths, feasible_distances
+    return feasible_paths[0], feasible_paths
 
 def get_shortest_path(graph, start_node, end_node):
 
@@ -85,8 +83,8 @@ def get_shortest_path(graph, start_node, end_node):
     """
 
     # Assertions
-    assert isinstance(start_node, str)
-    assert isinstance(end_node, str)
+    #assert isinstance(start_node, str)
+    #assert isinstance(end_node, str)
 
     # Take deepcopy of graph
     graph = deepcopy(graph)

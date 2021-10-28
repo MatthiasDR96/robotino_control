@@ -40,7 +40,7 @@ def tsp(start_node, nodes_to_visit, distance_function):
     if global_best:
         solution = dict()
         solution['sequence'] = global_best.visited[1:]
-        solution['paths'] = [edge.nodes_in_between[1:] for edge in global_best.edges]
+        solution['paths'] = [edge.nodes_in_between for edge in global_best.edges] # TODO If trouble, I removed [1:0] after nodes_in_between
         solution['dists'] = [edge.length for edge in global_best.edges]
     else:
         solution = None

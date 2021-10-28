@@ -1,7 +1,6 @@
 import time
 import tf
 import rospy
-import signal
 from nav_msgs.msg import Odometry
 from tf.transformations import euler_from_quaternion
 import rospy
@@ -17,10 +16,10 @@ class AGV_ROS(AGV_Main):
 		A class containing the intelligence of the agv agent
 	"""
 
-	def __init__(self, params_file, ta_agent, ro_agent, rm_agent):
+	def __init__(self, params_file):
 
 		# AGV init
-		super().__init__(params_file, ta_agent, ro_agent, rm_agent)
+		super().__init__(params_file)
 
 		# Overwrite action layer
 		self.action.move_to_pos = self.move_to_pos
@@ -38,10 +37,6 @@ class AGV_ROS(AGV_Main):
 		# Init subscriber
 		self.status_sub = rospy.Subscriber("/odom", Odometry, self.amcl_callback)
 
-		# Exit procedure
-		signal.signal(signal.SIGINT, self.shutdown)
-		self.stop_threads = False
-
 		# Shutdown
 		rospy.on_shutdown(self.shutdown)
 
@@ -49,14 +44,9 @@ class AGV_ROS(AGV_Main):
 
 		# Closing threads
 		print("\nShutdown robot")
-		self.exit_event.set()
-		time.sleep(1)
 
 		# Cancel goal
-		self.action.client.cancel_all_goals()
-
-		# Close connection
-		exit(0)
+		self.client.cancel_all_goals()
 
 	def amcl_callback(self, msg):
 

@@ -1,7 +1,9 @@
+import sys
 from datetime import datetime, timedelta
-import time
+sys.setrecursionlimit(10000)
 import os
 import yaml
+import threading
 
 from robotino_core.Comm import Comm
 from robotino_core.solvers.astar_solver import *
@@ -30,14 +32,22 @@ class AGV_RO_agent:
 		# Attribute
 		self.task_executing_end_time = 0
 
-	def main(self, _, stop):
+		# Exit event
+		self.exit_event = threading.Event()
+
+		# Processes
+		self.threads = []
+		self.threads.append(threading.Thread(target=self.main))
+
+	def signal_handler(self, _, __):
+		print("\n\nShutdown RO robot without communication possibilities")
+		self.exit_event.set()
+
+	def main(self):
 		
 		# Loop
 		print("RO-agent:	Main thread started")
 		while True:
-
-			# Timeout
-			time.sleep(self.params['ro_rate'])
 
 			# Plan and evaluate path and slots towards executing task
 			self.plan_executing_task()
@@ -45,12 +55,14 @@ class AGV_RO_agent:
 			# Plan and evaluate path and slots towards local tasks
 			self.plan_local_tasks()
 
-			# Close thread at close event 
-			if stop():
+			# Timeout and exit event
+			if self.exit_event.wait(timeout=self.params['ro_rate']): 
 				print("RO-agent:	Main thread killed")
 				break
 
 	def plan_executing_task(self):
+
+		### Inputs ###
 
 		# Get robot
 		robot = self.comm_main.sql_get_robot(self.params['id'])
@@ -63,8 +75,10 @@ class AGV_RO_agent:
 		task_executing = task_executing[0]
 
 		# Get graph
-		graph = self.comm_main.get_graph()
+		graph = self.comm_main.sql_get_graph()
 		if graph is None: return False
+
+		### Computation ###
 
 		# Calculate dist and cost to next node
 		dist_to_next = self.dist_euclidean((robot['x_loc'], robot['y_loc']), graph.nodes[robot['next_node']].pos)
@@ -77,8 +91,8 @@ class AGV_RO_agent:
 		# Do dmas untill successful reservation
 		while True:
 
-			# Do dmas
-			path, slots, dist, cost = dmas(start_node, task_executing['node'], start_time, graph, robot['id'], robot['speed'], self.comm_main)
+			# Do dmas towards executing task
+			path, slots, dist, cost = dmas(start_node, [task_executing['node']], start_time, graph, robot['id'], robot['speed'], self.comm_main)
 
 			# Add charging time 
 			if task_executing['message'] == 'charging':
@@ -90,6 +104,8 @@ class AGV_RO_agent:
 			# End criterium
 			if res: break
 
+		### Outputs ###
+
 		# Update executing task
 		self.task_executing_end_time = slots[-1][0] + slots[-1][1]
 		duration = (self.task_executing_end_time - start_time).total_seconds()
@@ -97,6 +113,8 @@ class AGV_RO_agent:
 		res = self.comm_main.sql_update_task(task_executing['id'], task_dict)
 
 	def plan_local_tasks(self):
+
+		### Inputs ###
 
 		# Get robot
 		robot = self.comm_main.sql_get_robot(self.params['id'])
@@ -109,12 +127,14 @@ class AGV_RO_agent:
 		task_executing = task_executing[0]
 
 		# Get graph
-		self.graph = self.comm_main.get_graph()
+		self.graph = self.comm_main.sql_get_graph()
 		if self.graph is None: return False
 
 		# Get tasks in local task list
 		local_task_list = self.comm_main.sql_get_local_task_list(robot['id'])
 		if local_task_list is None or len(local_task_list) == 0: return False
+
+		### Computation ###
 
 		# Start situation
 		start_node = task_executing['node']
@@ -129,7 +149,7 @@ class AGV_RO_agent:
 		# solution = tsp(start_node, nodes_to_visit, self.dist_astar)
 
 		# Convert task node names back to tasks including homing task
-		# sequence = [local_task_list[nodes_to_visit.index(name)] for name in solution['sequence']] + homing
+		# sequence = [local_task_list[nodes_to_visit.index(name)] for name in solution['sequence']] + homing 
 
 		# Plan routes for all tasks
 		priority = 1
@@ -139,7 +159,7 @@ class AGV_RO_agent:
 			while True:
 
 				# Update local_task_list
-				path, slots, dist, cost = dmas(start_node, task['node'], start_time, self.graph, robot['id'], robot['speed'], self.comm_main)
+				path, slots, dist, cost = dmas(start_node, [task['node']], start_time, self.graph, robot['id'], robot['speed'], self.comm_main)
 
 				# Add charging time 
 				if task_executing['message'] == 'charging':
@@ -150,6 +170,8 @@ class AGV_RO_agent:
 
 				# End criterium
 				if res: break
+
+			### Outputs ###
 
 			# Update task
 			end_time = slots[-1][0] + slots[-1][1]
