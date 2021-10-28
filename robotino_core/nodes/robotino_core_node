@@ -7,7 +7,7 @@ from robotino_core.agv.AGV_ROS import AGV_ROS
 if __name__== '__main__':
 
 	# Get id
-	id = int(rospy.get_param('/robotino_core_node/id'))
+	id = int(rospy.get_param('/robotino_core_node/robot_id'))
 
 	# Params file
 	params_file = 'setup' + str(id) + '.yaml'

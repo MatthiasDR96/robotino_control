@@ -83,6 +83,9 @@ class AGV_Main:
 		self.comm_main.sql_drop_table('robot' + str(self.id))
 		self.comm_main.sql_create_robot_table('robot' + str(self.id))
 
+		# Set graph
+		self.graph = self.comm_main.sql_get_graph()
+
 		# Exit event
 		self.exit_event = threading.Event()
 
@@ -236,6 +239,9 @@ class AGV_Main:
 
 			# Log data
 			self.comm_odom_callback.sql_add_to_table('robot' + str(self.id), robot_dict)
+
+			# Update graph
+			self.graph = self.comm_odom_callback.sql_get_graph()
 
 	def alive_checker(self):
 
@@ -419,10 +425,10 @@ class AGV_Main:
 		return node
 
 	def dist_astar(self, a, b):
-		return get_shortest_path(self.comm_main.sql_get_graph(), a, b)
+		return get_shortest_path(self.graph, a, b)
 
 	def search_closest_node(self, loc):
-		node = min(self.comm_main.sql_get_graph().nodes.values(), key=lambda node: self.dist_euclidean(node.pos, loc))
+		node = min(self.graph.nodes.values(), key=lambda node: self.dist_euclidean(node.pos, loc))
 		return node.name
 
 	@staticmethod

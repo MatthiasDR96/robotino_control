@@ -138,7 +138,7 @@ class AGV_ROS(AGV_Main):
 			rospy.loginfo("Goal pose received a cancel request before it started executing, successfully cancelled!")
 
 	def pick(self):
-		print("AGV " + str(self.agv.id) + ":        Pick")
+		print("AGV " + str(self.id) + ":        Pick")
 
 	def place(self):
-		print("AGV " + str(self.agv.id) + ":        Place")
+		print("AGV " + str(self.id) + ":        Place")

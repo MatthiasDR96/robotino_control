@@ -1,8 +1,8 @@
 ip: 'localhost'
 port: 10015
-host: 'localhost'
-user: 'matthias'
-password: 'matthias'
+host: '172.21.212.136'
+user: 'Robotino15'
+password: 'Robotino15'
 database: 'kb'
 
 id: 15
