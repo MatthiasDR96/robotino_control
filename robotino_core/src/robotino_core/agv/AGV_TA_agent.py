@@ -47,17 +47,16 @@ class AGV_TA_agent:
 	def signal_handler(self, _, __):
 			print("\n\nShutdown TA robot without communication possibilities")
 			self.exit_event.set()
-			#exit(0)
 
 	def main(self):
 
 		# Loop
-		print("TA-agent:	Main thread started")
+		print("\nTA-agent:	Main thread started")
 		while True:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
-				print("TA-agent:	Main thread killed")
+				print("\nTA-agent:	Main thread killed")
 				break
 
 			# Get tasks to assign
@@ -67,6 +66,9 @@ class AGV_TA_agent:
 			# Get all robots in the fleet
 			robots = self.comm_main.sql_select_everything_from_table('global_robot_list')
 			if robots is None or len(robots) == 0: continue
+
+			# Print
+			print("\nTA-agent:	Auction tasks " + str([task['id'] for task in tasks_to_auction]) + ' to robots ' + str([robot['id'] for robot in robots]))
 
 			# Create all announce messages
 			combinations = []
@@ -95,6 +97,8 @@ class AGV_TA_agent:
 				best_bid['task']['robot'] = robot['id']
 				best_bid['task']['task_bids'] = all_bids
 				tcp_client(robot['ip'], robot['port'], best_bid['task'])
+				print("TA-agent:	Assigns task " + str(best_bid['task']['id']) + ' to robot ' + str(robot['id']))
+
 
 	def tcp_listener(self):
 
@@ -124,6 +128,7 @@ class AGV_TA_agent:
 
 				# Timeout and exit event
 				if self.exit_event.wait(timeout=0.1): 
+					time.sleep(0.5)
 					print("TA-agent:	TCP listener thread killed")
 					break
 
@@ -178,6 +183,7 @@ class AGV_TA_agent:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=self.params['local_consensus_rate']): 
+				time.sleep(1.0)
 				print("TA-agent:	Local consensus thread killed")
 				break
 

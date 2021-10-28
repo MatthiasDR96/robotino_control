@@ -1,14 +1,8 @@
 ip: '127.0.0.1'
 port: 10015
-<<<<<<< HEAD
 host: '172.21.212.136'
 user: 'Robotino15'
 password: 'Robotino15'
-=======
-host: '127.0.0.1'
-user: 'FleetManager'
-password: 'FleetManager'
->>>>>>> 336eb2391666dd04da27273ed7f8fc65184f8e7c
 database: 'kb'
 
 id: 15

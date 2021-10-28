@@ -46,18 +46,20 @@ class AGV_RO_agent:
 	def main(self):
 		
 		# Loop
-		print("RO-agent:	Main thread started")
+		print("\nRO-agent:	Main thread started")
 		while True:
 
 			# Plan and evaluate path and slots towards executing task
+			print("\nRO-agent:	Plan executing task")
 			self.plan_executing_task()
 
 			# Plan and evaluate path and slots towards local tasks
+			print("RO-agent:	Plan local task list")
 			self.plan_local_tasks()
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=self.params['ro_rate']): 
-				print("RO-agent:	Main thread killed")
+				print("\nRO-agent:	Main thread killed")
 				break
 
 	def plan_executing_task(self):

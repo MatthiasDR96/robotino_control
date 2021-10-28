@@ -23,6 +23,7 @@ class AGV_ROS(AGV_Main):
 
 		# Overwrite action layer
 		self.action.move_to_pos = self.move_to_pos
+		self.action.cancel_goal = self.cancel_goal
 		self.action.pick = self.pick
 		self.action.place = self.place
 

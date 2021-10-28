@@ -17,6 +17,10 @@ class AGV_Action:
         # Interpolate
         for i in range(1, 11):
 
+            # Stop
+            if self.agv.exit_event.is_set():
+               return False
+
             # New location
             x = tmp_x + i/10 * (node_position[0] - tmp_x)
             y = tmp_y + i/10 * (node_position[1] - tmp_y)
@@ -43,8 +47,11 @@ class AGV_Action:
 
         return True
 
+    def cancel_goal(self):
+        pass
+
     def pick(self):
-        print("Agv " + str(self.agv.id) + ":         Picked item ")
+        print("AGV-agent:	Picked item ")
 
     def place(self):
-        print("Agv " + str(self.agv.id) + ":         Placed item ")
+        print("AGV-agent:	Placed item ")

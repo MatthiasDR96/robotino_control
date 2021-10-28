@@ -107,7 +107,7 @@ class AGV_Main:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
-				print("AGV-agent:	Main thread killed")
+				print("\nAGV-agent:	Main thread killed")
 				break
 
 			# Wait for a task on the local task list and pick first (lowest priority)
@@ -116,7 +116,7 @@ class AGV_Main:
 			task_executing = local_task_list[0]
 
 			# Start task
-			print("\nAgv " + str(self.id) + ":         Start executing task " + str(task_executing['id']))
+			print("\nAGV-agent:	Start executing task " + str(task_executing['id']))
 			if self.status != 'EMPTY': self.status = 'BUSY'
 
 			# Remove from local task list and add task to executing list
@@ -143,7 +143,7 @@ class AGV_Main:
 				self.comm_main.sql_update_task(task_executing['id'], task_dict)
 
 				# Reset executing task
-				print("Agv " + str(self.id) + ":         Finished task " + str(task_executing['id']))
+				print("AGV-agent:	Finished task " + str(task_executing['id']))
 					
 			# If task not reached
 			else:
@@ -153,7 +153,7 @@ class AGV_Main:
 				self.comm_main.sql_update_task(task_executing['id'], task_dict)
 
 				# Reset executing task
-				print("Agv " + str(self.id) + ":        Failed task " + str(task_executing['id']))
+				print("AGV-agent:	Failed task " + str(task_executing['id']))
 					
 			# Set status to IDLE when task is done or when done charging
 			if self.status != 'EMPTY': self.status = 'IDLE'
@@ -218,6 +218,7 @@ class AGV_Main:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
+				time.sleep(0.5)
 				print("AGV-agent:	Odom thread killed")
 				break
 
@@ -251,6 +252,7 @@ class AGV_Main:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
+				time.sleep(0.6)
 				print("AGV-agent:	Alive checker thread killed")
 				break
 
@@ -295,6 +297,7 @@ class AGV_Main:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=self.params['ro_rate']): 
+				time.sleep(0.7)
 				print("AGV-agent:	Homing thread killed")
 				break
 
@@ -322,6 +325,7 @@ class AGV_Main:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
+				time.sleep(0.8)
 				print("AGV-agent:	Progress tracker thread killed")
 				break
 
@@ -348,6 +352,7 @@ class AGV_Main:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
+				time.sleep(0.9)
 				print("AGV-agent:	Performance monitor thread killed")
 				break
 
@@ -397,6 +402,7 @@ class AGV_Main:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
+				time.sleep(1.0)
 				print("AGV-agent:	Threshold charging thread killed")
 				break
 
