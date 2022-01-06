@@ -2,7 +2,7 @@
 
 import sys
 import signal
-from robotino_core.agv. AGV_Main import AGV_Main
+from robotino_core.agv.AGV_Main import AGV_Main
 
 if __name__== '__main__':
 

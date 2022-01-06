@@ -1,4 +1,3 @@
-import time
 import tf
 import rospy
 from nav_msgs.msg import Odometry
@@ -49,27 +48,22 @@ class AGV_ROS(AGV_Main):
 		# Cancel goal
 		self.client.cancel_all_goals()
 
-	def amcl_callback(self, msg):
+	def amcl_callback(self, _):
 
+		# Get transformation from map to baselink
 		try:
 			self.tf_listener.waitForTransform('map', 'base_link', rospy.Time(), rospy.Duration(1.0))
-		except (tf.Exception, tf.ConnectivityException, tf.LookupException):
-			rospy.loginfo("Cannot find transform between odom and base_link")
-			rospy.signal_shutdown("tf Exception")
-		try:
 			(trans, rot) = self.tf_listener.lookupTransform('map', 'base_link', rospy.Time(0))
 			rotation = euler_from_quaternion(rot)
 		except (tf.Exception, tf.ConnectivityException, tf.LookupException):
-			rospy.loginfo("TF Exception")
+			rospy.loginfo("Cannot find transform between odom and base_link")
+			rospy.signal_shutdown("tf Exception")			
 
 		# Get position
 		self.x_loc = trans[0] # msg.pose.pose.position.x
 		self.y_loc = trans[1] # msg.pose.pose.position.y
 
 		# Get orientation
-		# orientation_q = msg.pose.pose.orientation
-		# orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
-		# (_, _, yaw) = euler_from_quaternion(rot)
 		self.theta = rotation[2] # yaw
 
 		# Search closest node

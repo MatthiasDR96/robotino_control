@@ -51,7 +51,7 @@ class AGV_RM_agent:
 			start_task = self.agv.task_executing
 			local_task_list = self.comm_main.sql_get_local_task_list(self.agv.id)
 
-			# Compute if there arelocal task lists
+			# Compute if there are local task lists
 			if start_task['id'] == -1 or len(local_task_list) == 0:
 				continue
 

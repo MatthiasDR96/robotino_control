@@ -1,0 +1,85 @@
+@startuml
+
+class Action {
+
+    {static} Vehicle vehicle
+
+    +void {abstract} move_to_pos(tuple node_position)
+    +void {abstract} cancel_goal()
+    +void {abstract} pick()
+    +void {abstract} place()
+
+}
+
+class Vehicle {
+
+    {static} Comm comm
+    {static} Action action
+    {static} int id
+    {static} tuple depot_station
+    {static} str node
+    
+    {static} float x_loc
+    {static} float y_loc
+    {static} float theta
+    {static} float speed
+    {static} float battery_status
+
+    {static} Thread main
+    {static} Thread odom_callback
+    {static} Thread alive_checker
+    {static} Thread homing
+    {static} Thread progress_tracker
+    {static} Thread performance_monitor
+    {static} Thread threshold_charging
+
+    +void {abstract} main()
+    +void {abstract} execute_task()
+    +void {abstract} odom_callback()
+    +void {abstract} alive_checker()
+    +void {abstract} homing()
+    +void {abstract} progress_tracker()
+    +void {abstract} performance_monitor()
+    +void {abstract} threshold_charging()
+
+}
+
+class TA_Agent {
+
+    {static} Comm comm
+    {static} Thread main
+    {static} Thread tcp_listener
+    {static} Thread local_consensus
+
+    +void {abstract} main()
+    +void {abstract} execute_tasktcp_listener()
+    +void {abstract} handle_client()
+    +void {abstract} local_consensus()
+    +void {abstract} compute_bid()
+    +void {abstract} tcp_client()
+
+}
+
+class RO_Agent {
+
+    {static} Comm comm
+    {static} Thread main
+
+    +void {abstract} main()
+    +void {abstract} plan_executing_task()
+    +void {abstract} plan_local_tasks()
+    
+}
+
+class RM_Agent {
+
+    static} Comm comm
+    {static} Thread main
+
+    +void {abstract} main()
+
+}
+
+Vehicle "1" o-- Action : aggregation
+
+@enduml

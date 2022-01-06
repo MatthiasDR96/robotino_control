@@ -1,0 +1,34 @@
+@startuml connection_diagram
+
+package "Decentral Fleet Management Framework" {
+
+    [Communication_layer]
+    [Vehicle_Agent]
+    [TA_Agent]
+    [RO_Agent]
+    [RM_Agent]
+    
+}
+
+database "MySql" {
+
+    [global_robot_list]
+    [global_task_list]
+
+}
+
+[global_task_list] -down-> [Vehicle]
+[Vehicle] -down-> [global_robot_list]
+[TA_Agent] <-down-> [Communication_layer]
+[RO_Agent] <-down-> [Communication_layer]
+[RM_Agent] <-down-> [Communication_layer]
+[Vehicle_Agent] -down-> [Communication_layer]
+[Communication_layer] <-up-> [global_task_list]
+[Communication_layer] <-up-> [global_robot_list]
+[global_task_list] --> [Webserver]
+[global_robot_list] --> [Webserver]
+[Webserver] -down-> HTTP
+[MES] -down-> [Driver] : MES Task Description
+[Driver] -right-> [global_task_list] : Framework Task Description
+
+@enduml
