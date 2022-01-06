@@ -7,7 +7,7 @@ package "Decentral Fleet Management Framework" {
     [TA_Agent]
     [RO_Agent]
     [RM_Agent]
-    
+
 }
 
 database "MySql" {
@@ -17,18 +17,26 @@ database "MySql" {
 
 }
 
-[global_task_list] -down-> [Vehicle]
-[Vehicle] -down-> [global_robot_list]
-[TA_Agent] <-down-> [Communication_layer]
-[RO_Agent] <-down-> [Communication_layer]
-[RM_Agent] <-down-> [Communication_layer]
-[Vehicle_Agent] -down-> [Communication_layer]
-[Communication_layer] <-up-> [global_task_list]
-[Communication_layer] <-up-> [global_robot_list]
-[global_task_list] --> [Webserver]
-[global_robot_list] --> [Webserver]
-[Webserver] -down-> HTTP
-[MES] -down-> [Driver] : MES Task Description
-[Driver] -right-> [global_task_list] : Framework Task Description
+[global_robot_list] -[hidden]-> [global_task_list]
+[global_task_list] ---> [Vehicle]
+[Vehicle] ---> [global_robot_list]
+[Vehicle] --> Action
+
+[TA_Agent] <--> [Communication_layer]
+[RO_Agent] <--> [Communication_layer]
+[RM_Agent] <--> [Communication_layer]
+[Vehicle_Agent] <--> [Communication_layer]
+
+[Communication_layer] <--> [global_task_list]
+[Communication_layer] <--> [global_robot_list]
+[Communication_layer] <--> TCP
+
+
+[global_task_list] ---> [Webserver]
+[global_robot_list] ---> [Webserver]
+[Webserver] --> HTTP
+
+[MES] --> [Driver]
+[Driver] -> [global_task_list]
 
 @enduml
