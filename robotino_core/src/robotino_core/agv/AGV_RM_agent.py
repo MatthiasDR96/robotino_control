@@ -5,6 +5,7 @@ import threading
 
 from robotino_core.Comm import Comm
 from robotino_core.solvers.astar_solver import *
+from robotino_core.solvers.resource_management_solver import *
 
 class AGV_RM_agent:
 
@@ -20,89 +21,129 @@ class AGV_RM_agent:
 		with open(data_path, 'r') as file:
 			self.params = yaml.load(file, Loader=yaml.FullLoader)
 
-		# Init database communication
-		self.comm_main = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_main.sql_open()
-		self.comm_threshold_charging = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_threshold_charging.sql_open()
-
+		# Init database communication for all threads
+		self.comm_resource_optimizer = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
+		self.comm_resource_thresholder = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
+		
 		# Exit event
 		self.exit_event = threading.Event()
 
 		# Processes
 		self.threads = []
-		#self.threads.append(threading.Thread(target=rm_agent.main, args=(11, lambda: self.stop_threads)))
+		# self.threads.append(threading.Thread(target=self.resource_optimizer))
+		self.threads.append(threading.Thread(target=self.resource_thresholder))
 
 	def signal_handler(self, _, __):
-		print("\n\nShutdown robot without communication possibilities")
-		self.stop_threads = True
-		#exit(0)
+		print("\n\nShutdown RM-agent")
+		self.exit_event.set()
 
-	def main(self, _, stop):
+	def resource_optimizer(self):
+
+		"""
+		This thread determines the most optimal resource refill station.
+
+		"""
 
 		# Loop
-		print("RM-agent:	Main thread started")
+		print("\nRM-agent:	Resource optimizer thread started")
 		while True:
 
-			# Timeout
-			time.sleep(self.agv.params['dmas_rate'])
+			# Timeout and exit event
+			if self.exit_event.wait(timeout=self.params['resource_optimizer_rate']): 
+				print("\nRM-agent:	Resource optimizer thread killed")
+				break
 
-			# Get start node and local task list
-			start_task = self.agv.task_executing
-			local_task_list = self.comm_main.sql_get_local_task_list(self.agv.id)
+			# Get robot
+			robot = self.comm_resource_optimizer.sql_select_robot(self.params['id'])
+			if robot is None or len(robot) == 0: continue
 
-			# Compute if there are local task lists
-			if start_task['id'] == -1 or len(local_task_list) == 0:
-				continue
+			# Get task executing
+			task_executing = self.comm_resource_optimizer.sql_select_executing_task(robot[0]['id'])
+			if task_executing is None or len(task_executing) == 0: continue
+
+			# Get local task list
+			local_task_list = self.comm_resource_optimizer.sql_select_local_task_list(self.params['id'])
+			if local_task_list is None: continue
 
 			# Remove charging station
 			adapted_local_task_list = [task for task in local_task_list if not task['message'] == 'charging'] 
-
-			# Task executing cost
-			task_executing_cost = self.agv.task_executing_cost
-
-			# Local task list cost
-			local_task_list_cost = self.agv.local_task_list_cost
-
-			# If path already planned
-			if not all(elem in local_task_list_cost.keys() for elem in [task['id'] for task in adapted_local_task_list]):
-				continue
+			charging_station = [task for task in local_task_list if task['message'] == 'charging']
 
 			# Compute end resource level
-			task_executing_charge_loss = self.resource_consumption(task_executing_cost)
-			local_task_list_charge_loss = [self.resource_consumption(cost) for cost in local_task_list_cost.values()]
-			total_charge_loss = task_executing_charge_loss + sum(local_task_list_charge_loss)
-			end_level = self.agv.battery_status - total_charge_loss
+			task_executing_charge_loss = self.resource_consumption(robot[0]['task_executing_cost'])
+			local_task_list_charge_loss = self.resource_consumption(robot[0]['local_task_list_cost'])
+			total_charge_loss = task_executing_charge_loss + local_task_list_charge_loss
+			end_level = robot[0]['battery_status'] - total_charge_loss
 
 			# Solve for optimal charging station
-			if not end_level <= self.agv.params['battery_threshold']:
-				continue
+			if end_level > self.params['battery_threshold']: continue
 
 			# Compute optimal insertion point, charging station, and charging percent
-			charging_station, insertion_index, charging_percent = self.optimize_brute_force(adapted_local_task_list, start_task, self.agv.battery_status)
+			charging_station, insertion_index, charging_percent = solve_brute_force(adapted_local_task_list, task_executing[0], robot[0]['battery_status'])
 
 			# If no need to charge:
-			if insertion_index is None:
-				continue
+			if insertion_index is None: continue
 
-			# Add or update charging station
-			old_charging_station = [task for task in local_task_list if task['message'] == 'charging']
-			if len(old_charging_station) == 0:
-				task_dict = {"node": charging_station, "priority": insertion_index, "robot": self.agv.id, "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'charging', "status": 'assigned', "approach": '-', 'task_bids': '-', 'path': '[]', 'slots': '[]', 'dist': 0.0, 'cost': 0.0}
-				self.comm_main.sql_add_to_table('global_task_list', task_dict)
+			# Add or update charging station TODO aad charging percent to database
+			if len(charging_station) == 0:
+				task_dict = {"node": charging_station, "priority": insertion_index, "robot": self.params['id'], "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'charging', "status": 'assigned', "approach": '-', 'task_bids': '-', 'path': '[]', 'slots': '[]', 'dist': 0.0, 'cost': 0.0}
+				self.comm_resource_optimizer.sql_add_to_table('global_task_list', task_dict)
 			else:
-				task_dict = {"node": old_charging_station[0]['node'], "priority": insertion_index, "robot": self.agv.id, "message": 'charging', "status": 'assigned'}
-				self.comm_main.sql_update_task(old_charging_station[0]['id'], task_dict)
+				task_dict = {"node": charging_station[0]['node'], "priority": insertion_index, "robot": self.params['id'], "message": 'charging', "status": 'assigned'}
+				self.comm_resource_optimizer.sql_update_task(charging_station[0]['id'], task_dict)
 
 			# Update local_task_list sequence
 			for task in adapted_local_task_list:
 				if task['priority'] >= insertion_index:
 					task_dict = {'priority': task['priority'] + 1}
-					self.comm_main.sql_update_task(task['id'], task_dict)
+					self.comm_resource_optimizer.sql_update_task(task['id'], task_dict)
 
-			# Close thread at close event 
-			if stop():
-				print("RM-agent:	Main thread killed")
+	def resource_thresholder(self):
+
+		"""
+		This thread determines the closest charging station when the resource threshold is reached.
+
+		"""
+
+		# Loop
+		print("RM-agent:	Resource thresholder thread started")
+		while True:
+
+			# Timeout and exit event
+			if self.exit_event.wait(timeout=self.params['resource_thresholder_rate']): 
+				print("RM-agent:	Resource thresholder thread killed")
 				break
 
+			# Get graph
+			self.graph = self.comm_resource_thresholder.sql_select_graph()
+			if self.graph is None: return None
+
+			# Get task executing
+			task_executing = self.comm_resource_thresholder.sql_select_executing_task(self.params['id'])
+			if task_executing is None or len(task_executing) == 0: continue
+
+			# Get robot
+			robot = self.comm_resource_thresholder.sql_select_robot(self.params['id'])
+			if robot is None or len(robot) == 0: continue
+
+			# Check charging status
+			if robot[0]['status'] == 'BUSY' and robot[0]['battery_status'] < self.params['battery_threshold']:
+
+				# Get start node of robot
+				start_node = task_executing[0]['node']
+
+				# Update robot
+				robot_dict = {"status": 'EMPTY'}
+				self.comm_resource_thresholder.sql_update_robot(self.params['id'], robot_dict)
+
+				# Create charging task
+				closest_charging_station = min(self.params['depot_locations'], key=lambda pos: self.dist_astar(pos, start_node))
+				task_dict = {"node": closest_charging_station, "priority": 0, "robot": self.params['id'], "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'charging', "status": 'assigned', "approach": '-', 'task_bids': '-', 'path': '[]', 'slots': '[]', 'dist': 0.0, 'cost': 0.0}
+				self.comm_resource_thresholder.sql_add_to_table('global_task_list', task_dict)
+
+	def dist_astar(self, a, b):
+		return get_shortest_path(self.graph, a, b)
+
+	def resource_consumption(self, traveltime):
+		return traveltime * self.params['resource_consumption_factor']
 	

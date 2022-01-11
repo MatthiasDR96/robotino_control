@@ -17,10 +17,16 @@ database "MySql" {
 
 }
 
-[global_robot_list] -[hidden]-> [global_task_list]
-[global_task_list] ---> [Vehicle]
-[Vehicle] ---> [global_robot_list]
-[Vehicle] --> Action
+[global_robot_list] -[hidden]- [global_task_list]
+[Webserver] -[hidden]- [Vehicle]
+
+[global_task_list] -> [Vehicle]
+[Vehicle] -> [global_robot_list]
+[Vehicle] -> Action
+
+[global_task_list] -> [Webserver]
+[global_robot_list] -> [Webserver]
+[Webserver] -> HTTP
 
 [TA_Agent] <--> [Communication_layer]
 [RO_Agent] <--> [Communication_layer]
@@ -29,14 +35,7 @@ database "MySql" {
 
 [Communication_layer] <--> [global_task_list]
 [Communication_layer] <--> [global_robot_list]
-[Communication_layer] <--> TCP
 
-
-[global_task_list] ---> [Webserver]
-[global_robot_list] ---> [Webserver]
-[Webserver] --> HTTP
-
-[MES] --> [Driver]
-[Driver] -> [global_task_list]
+[MES] --> [TA_Agent]
 
 @enduml

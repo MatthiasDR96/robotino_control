@@ -9,7 +9,7 @@ from tf.transformations import quaternion_from_euler
 from robotino_core.agv.AGV_Main import AGV_Main
 
 
-class AGV_ROS(AGV_Main):
+class AGV_Main_ROS(AGV_Main):
 
 	"""
 		A class containing the intelligence of the agv agent

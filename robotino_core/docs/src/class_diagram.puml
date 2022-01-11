@@ -1,4 +1,4 @@
-@startuml
+@startuml class_diagram
 
 class Action {
 
@@ -18,6 +18,7 @@ class Vehicle {
     {static} int id
     {static} tuple depot_station
     {static} str node
+    {static} str status
     
     {static} float x_loc
     {static} float y_loc
@@ -25,47 +26,45 @@ class Vehicle {
     {static} float speed
     {static} float battery_status
 
-    {static} Thread main
-    {static} Thread odom_callback
+    {static} Thread task_executer
+    {static} Thread status_updater
     {static} Thread alive_checker
-    {static} Thread homing
     {static} Thread progress_tracker
     {static} Thread performance_monitor
-    {static} Thread threshold_charging
 
-    +void {abstract} main()
+    +void {abstract} task_executer()
     +void {abstract} execute_task()
-    +void {abstract} odom_callback()
+    +void {abstract} status_updater()
     +void {abstract} alive_checker()
-    +void {abstract} homing()
     +void {abstract} progress_tracker()
     +void {abstract} performance_monitor()
-    +void {abstract} threshold_charging()
 
 }
 
 class TA_Agent {
 
     {static} Comm comm
-    {static} Thread main
-    {static} Thread tcp_listener
-    {static} Thread local_consensus
+    {static} Thread task_collector
+    {static} Thread task_allocator
+    {static} Thread task_switcher
+    {static} Thread task_scheduler
 
-    +void {abstract} main()
-    +void {abstract} execute_tasktcp_listener()
-    +void {abstract} handle_client()
-    +void {abstract} local_consensus()
-    +void {abstract} compute_bid()
-    +void {abstract} tcp_client()
-
+    +void {abstract} task_collector()
+    +void {abstract} task_allocator()
+    +void {abstract} task_switcher()
+    +void {abstract} task_scheduler()
+    +list bid {abstract} compute_bid(local_task_list, new_task)
+ 
 }
 
 class RO_Agent {
 
     {static} Comm comm
-    {static} Thread main
+    {static} Thread route_planner
+    {static} Thread route_evaporator
 
-    +void {abstract} main()
+    +void {abstract} route_planner()
+    +void {abstract} route_evaporator()
     +void {abstract} plan_executing_task()
     +void {abstract} plan_local_tasks()
     
@@ -73,10 +72,12 @@ class RO_Agent {
 
 class RM_Agent {
 
-    static} Comm comm
-    {static} Thread main
+    {static} Comm comm
+    {static} Thread resource_optimizer
+    {static} Thread resource_thresholder
 
-    +void {abstract} main()
+    +void {abstract} resource_optimizer()
+    +void {abstract} resource_thresholder()
 
 }
 

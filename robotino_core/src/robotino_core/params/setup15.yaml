@@ -1,23 +1,36 @@
 ip: '127.0.0.1'
 port: 10015
-host: '172.21.212.136'
-user: 'Robotino15'
-password: 'Robotino15'
+host: '127.0.0.1'
+user: 'root'
+password: 'abc123'
 database: 'kb'
 
 id: 15
-depot: 'pos_2'
-
-robot_speed: 1
-collision_threshold: 0.5
-battery_threshold: 20
-epsilon: 1.0
-resource_scale_factor: 1
-
-ro_rate: 1
-local_consensus_rate: 5
+depot: 'pos_1'
 depot_locations:
     - pos_1
     - pos_2
     - pos_3
+
+robot_speed: 1
+battery_threshold: 20
+resource_scale_factor: 1
+resource_consumption_factor: 1
+
+epsilon: 1.0
+objective_index: 0
+
+dead_time: 5
+task_allocator_rate: 1
+task_switcher_rate: 5
+task_scheduler_rate: 1
+route_planner_rate: 1
+route_evaporator_rate: 1.5
+resource_optimizer_rate: 5
+resource_thresholder_rate: 1
+
+t0: 0.1
+rho: 0.5
+
+
 

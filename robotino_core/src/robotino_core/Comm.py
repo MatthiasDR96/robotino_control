@@ -7,9 +7,8 @@ from robotino_core.Graph import Graph
 class Comm:
 
 	"""
-		A library containing the interfaces to communicate with an SQL knowledge base or with other devices via TCP/IP
-		When the simulation software want to be used in an experimental setup, it is sufficient to change the methods
-		in this library.
+		A library containing the interfaces to communicate with an SQL database. This library is the only interface to the 
+		external infrastructure. So it suffices to only adapt this library for integration in other systems.
 	"""
 
 	def __init__(self, ip, port, host, user, password, database):
@@ -25,7 +24,7 @@ class Comm:
 		# Communication monitoring
 		self.sql_queries = 0
 
-	def sql_open(self):
+		# Connect
 		try:
 			cnx = connect(
 				host = self.host, 
@@ -42,10 +41,7 @@ class Comm:
 		self.cursor.close()
 		self.conn.close()			
 
-	def sql_drop_table(self, table):
-		assert isinstance(table, str)
-		sql = "DROP TABLE IF EXISTS {}".format(table)
-		self.cursor.execute(sql)
+	### Creat tables ### 
 
 	def sql_create_robot_table(self, name):
 		sql = """
@@ -78,6 +74,15 @@ class Comm:
 		self.cursor.execute(sql)
 		self.conn.commit()
 
+	### Drop tables
+
+	def sql_drop_table(self, table):
+		assert isinstance(table, str)
+		sql = "DROP TABLE IF EXISTS {}".format(table)
+		self.cursor.execute(sql)
+
+	### Add to database ###
+
 	def sql_add_to_table(self, table, item):
 		assert isinstance(table, str)
 		assert isinstance(item, dict)
@@ -93,19 +98,7 @@ class Comm:
 			print("Database not alive1")
 			return None
 
-	def sql_select_from_table(self, table, criterium, value):
-		assert isinstance(table, str)
-		assert isinstance(criterium, str)
-		sql = "SELECT * FROM {} WHERE {} = %s".format(table, criterium) + " ORDER BY id"
-		val = (value,)
-		try:
-			self.conn.reconnect()
-			self.cursor.execute(sql, val)
-			result = self.cursor.fetchall()
-			return result
-		except:
-			print("Database not alive3")	
-			return None
+	### Select from database ###
 		
 	def sql_select_everything_from_table(self, table):
 		assert isinstance(table, str)
@@ -116,7 +109,20 @@ class Comm:
 			result = self.cursor.fetchall()
 			return result
 		except:
-			print("Database not alive " + str(table))	
+			print("Database not alive1" + str(table))	
+			return None
+
+	def sql_select_robot_reservations(self, id):
+		assert isinstance(id, int)
+		sql = "SELECT * FROM environmental_agents WHERE robot = %s ORDER BY id"
+		val = (id,)
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql, val)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive2")	
 			return None
 
 	def sql_select_reservations(self, table, node, id):
@@ -134,7 +140,7 @@ class Comm:
 			print("Database not alive2")	
 			return None
 
-	def sql_get_robot(self, robot_id):
+	def sql_select_robot(self, robot_id):
 		assert isinstance(robot_id, int)
 		sql = "SELECT * FROM global_robot_list WHERE id = %s"
 		val = (robot_id,)
@@ -147,7 +153,7 @@ class Comm:
 			print("Database not alive3")	
 			return None
 
-	def sql_get_local_task_list(self, robot_id):
+	def sql_select_local_task_list(self, robot_id):
 		assert isinstance(robot_id, int)
 		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'assigned' ORDER BY priority"
 		val = (robot_id,)
@@ -160,9 +166,9 @@ class Comm:
 			print("Database not alive4")	
 			return None
 
-	def sql_get_tasks_to_auction(self, robot_id):
+	def sql_select_executing_task(self, robot_id):
 		assert isinstance(robot_id, int)
-		sql = "SELECT * FROM global_task_list WHERE auctioneer = %s AND status = 'unassigned' ORDER BY priority"
+		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'executing' ORDER BY priority"
 		val = (robot_id,)
 		try:
 			self.conn.reconnect()
@@ -173,9 +179,31 @@ class Comm:
 			print("Database not alive5")	
 			return None
 
-	def sql_get_executing_task(self, robot_id):
+	def sql_select_assigned_tasks(self):
+		sql = "SELECT * FROM global_task_list WHERE status = 'assigned' AND NOT message = 'homing' AND NOT message = 'charging' "
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive6")	
+			return None
+
+	def sql_select_unassigned_tasks(self):
+		sql = "SELECT * FROM global_task_list WHERE status = 'unassigned' "
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive7")	
+			return None
+
+	def sql_select_tasks_to_auction(self, robot_id):
 		assert isinstance(robot_id, int)
-		sql = "SELECT * FROM global_task_list WHERE robot = %s AND status = 'executing' ORDER BY priority"
+		sql = "SELECT * FROM global_task_list WHERE auctioneer = %s AND status = 'unassigned' ORDER BY priority"
 		val = (robot_id,)
 		try:
 			self.conn.reconnect()
@@ -183,10 +211,10 @@ class Comm:
 			result = self.cursor.fetchall()
 			return result
 		except:
-			print("Database not alive6")	
+			print("Database not alive8")	
 			return None
 
-	def sql_get_graph(self):
+	def sql_select_graph(self):
 		try:
 			items = self.sql_select_everything_from_table('graph')
 			graph = Graph()
@@ -197,8 +225,10 @@ class Comm:
 			graph.create_edges(node_names, node_neighbors)
 			return graph
 		except:
-			print("Database not alive7")	
+			print("Database not alive9")	
 			return None
+
+	### Delete from database ###
 
 	def sql_delete_from_table(self, table, criterium, value):
 		assert isinstance(table, str)
@@ -210,7 +240,7 @@ class Comm:
 			self.conn.commit()
 			return True
 		except:
-			print("Database not alive8")	
+			print("Database not alive10")	
 			return False
 
 	def sql_delete_everything_from_table(self, table):
@@ -222,7 +252,7 @@ class Comm:
 			self.conn.commit()
 			return True
 		except:
-			print("Database not alive9")	
+			print("Database not alive11")	
 			return False
 
 	def sql_delete_local_task_list(self, robot_id):
@@ -235,8 +265,10 @@ class Comm:
 			self.conn.commit()
 			return True
 		except:
-			print("Database not alive10")
+			print("Database not alive12")
 			return False
+
+	### Update database ###
 
 	def sql_update_robot(self, id, robot): 
 		assert isinstance(id, int)
@@ -277,7 +309,7 @@ class Comm:
 			self.sql_queries += 1
 			return True
 		except:
-			print("Database not alive11")	
+			print("Database not alive13")	
 			return False
 
 	def sql_update_task(self, id, task):
@@ -300,5 +332,16 @@ class Comm:
 			self.conn.commit()
 			return True
 		except:
-			print("Database not alive12")	
+			print("Database not alive14")	
+			return False
+
+	def sql_update_reservations(self, pheromones):
+		sql = """UPDATE environmental_agents SET pheromone = %s WHERE id = %s"""
+		val = pheromones
+		try:
+			self.cursor.executemany(sql, val)
+			self.conn.commit()
+			return True
+		except:
+			print("Database not alive15")	
 			return False

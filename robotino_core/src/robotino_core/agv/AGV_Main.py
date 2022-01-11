@@ -16,7 +16,7 @@ from robotino_core.solvers.astar_solver import *
 class AGV_Main:
 
 	"""
-		A class containing the intelligence of the agv agent
+		A class containing the intelligence of the main AGV-agent
 	"""
 
 	def __init__(self, params_file):
@@ -27,32 +27,23 @@ class AGV_Main:
 		with open(data_path, 'r') as file:
 			self.params = yaml.load(file, Loader=yaml.FullLoader)
 		
-		# Communication layers
-		self.comm_main = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_main.sql_open()
-		self.comm_odom_callback = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_odom_callback.sql_open()
+		# Init database communication for all threads
+		self.comm_task_executer = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
+		self.comm_status_updater = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
 		self.comm_alive_checker = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_alive_checker.sql_open()
-		self.comm_homing = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_homing.sql_open()
 		self.comm_progress_tracker = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_progress_tracker.sql_open()
 		self.comm_performance_monitor = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_performance_monitor.sql_open()
-		self.comm_threshold_charging = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_threshold_charging.sql_open()
-
+		
 		# Action layer		
 		self.action = AGV_Action(self)
 
 		# Depot station
-		self.depot = self.params['depot'] #random.choice(list(self.comm_main.sql_get_graph().nodes.keys()))
+		self.depot = self.params['depot'] #random.choice(list(self.comm_task_executer.sql_select_graph().nodes.keys()))
 
 		# Current attributes - status at the moment
 		self.id = self.params['id']
-		self.x_loc = self.comm_main.sql_get_graph().nodes[self.depot].pos[0]
-		self.y_loc = self.comm_main.sql_get_graph().nodes[self.depot].pos[1]
+		self.x_loc = self.comm_task_executer.sql_select_graph().nodes[self.depot].pos[0]
+		self.y_loc = self.comm_task_executer.sql_select_graph().nodes[self.depot].pos[1]
 		self.theta = 0.0
 		self.speed = self.params['robot_speed']
 		self.node = self.depot
@@ -80,52 +71,55 @@ class AGV_Main:
 		self.total_path = [] # Total path through all tasksin local task list
 		
 		# Create logger table for performance in time
-		self.comm_main.sql_drop_table('robot' + str(self.id))
-		self.comm_main.sql_create_robot_table('robot' + str(self.id))
-
-		# Set graph
-		self.graph = self.comm_main.sql_get_graph()
+		self.comm_task_executer.sql_drop_table('robot' + str(self.id))
+		self.comm_task_executer.sql_create_robot_table('robot' + str(self.id))
 
 		# Exit event
 		self.exit_event = threading.Event()
 
 		# Processes
 		self.threads = []
-		self.threads.append(threading.Thread(target=self.main))
-		self.threads.append(threading.Thread(target=self.odom_callback))
+		self.threads.append(threading.Thread(target=self.task_executer))
+		self.threads.append(threading.Thread(target=self.status_updater))
 		self.threads.append(threading.Thread(target=self.alive_checker))
-		self.threads.append(threading.Thread(target=self.homing))
 		self.threads.append(threading.Thread(target=self.progress_tracker))
 		self.threads.append(threading.Thread(target=self.performance_monitor))
-		self.threads.append(threading.Thread(target=self.threshold_charging))
+		
+	def task_executer(self):
 
-	def main(self):
+		"""
+		This thread executes the first task on the local task list (with priority one).
+
+		"""
 
 		# Loop
-		print("\nAGV-agent:	Main thread started")
+		print("\nAGV-agent:	Task executer thread started")
 		while True:
 
 			# Timeout and exit event
-			if self.exit_event.wait(timeout=0.1): 
-				print("\nAGV-agent:	Main thread killed")
+			if self.exit_event.wait(timeout=1): 
+				print("\nAGV-agent:	Task executer thread killed")
 				break
 
-			# Wait for a task on the local task list and pick first (lowest priority)
-			local_task_list = self.comm_main.sql_get_local_task_list(self.id)
+			# Wait for a task on the local task list 
+			local_task_list = self.comm_task_executer.sql_select_local_task_list(self.id)
 			if local_task_list is None or len(local_task_list) == 0: continue
+
+			# Pick first task (lowest priority)
 			task_executing = local_task_list[0]
 
 			# Start task
 			print("\nAGV-agent:	Start executing task " + str(task_executing['id']))
 			if self.status != 'EMPTY': self.status = 'BUSY'
 
+			# Do not execute
+			exit()
+
 			# Remove from local task list and add task to executing list
 			task_executing_start_time = datetime.now()
-			self.task_executing_total_dist = get_shortest_path(self.comm_main.sql_get_graph(), self.node, task_executing['node'])[1]
+			self.task_executing_total_dist = get_shortest_path(self.comm_task_executer.sql_select_graph(), self.node, task_executing['node'])[1]
 			task_dict = {'priority': 0, 'status': 'executing', 'estimated_start_time': task_executing_start_time.strftime('%H:%M:%S'), 'real_start_time': task_executing_start_time.strftime('%H:%M:%S')}
-			self.comm_main.sql_update_task(task_executing['id'], task_dict)
-
-			#exit()
+			self.comm_task_executer.sql_update_task(task_executing['id'], task_dict)
 
 			# Move to task
 			result = self.execute_task(task_executing)
@@ -140,7 +134,7 @@ class AGV_Main:
 				end_time = datetime.now()
 				duration = (end_time - task_executing_start_time).total_seconds()
 				task_dict = {'status': 'done', 'progress': 100, 'real_end_time': end_time.strftime('%H:%M:%S'), 'real_duration': str(duration)}
-				self.comm_main.sql_update_task(task_executing['id'], task_dict)
+				self.comm_task_executer.sql_update_task(task_executing['id'], task_dict)
 
 				# Reset executing task
 				print("AGV-agent:	Finished task " + str(task_executing['id']))
@@ -150,7 +144,7 @@ class AGV_Main:
 
 				# Make task unnasigned if not able to reach
 				task_dict = {'status': 'unassigned', 'message': '-', 'priority': 0}
-				self.comm_main.sql_update_task(task_executing['id'], task_dict)
+				self.comm_task_executer.sql_update_task(task_executing['id'], task_dict)
 
 				# Reset executing task
 				print("AGV-agent:	Failed task " + str(task_executing['id']))
@@ -160,12 +154,17 @@ class AGV_Main:
 
 	def execute_task(self, task):
 
+		"""
+		This function executes a task and follows the suggested route if this exist. Otherwise it calculates an astar path.
+
+		"""
+
 		# Move from node to node until end node reached
 		self.task_executing_dist_done = 0
 		while not self.node == task['node']:
 
 			# Get executing task
-			executing_task = self.comm_main.sql_get_executing_task(self.id)
+			executing_task = self.comm_task_executer.sql_select_executing_task(self.id)
 			if executing_task is None or len(executing_task) == 0: return False
 
 			# Get planned path
@@ -175,7 +174,7 @@ class AGV_Main:
 			# Plan path if no path available
 			if len(task_executing_path) == 0:
 				print("AGV-agent:	Needs to plan astar")
-				task_executing_path = get_shortest_path(self.comm_main.sql_get_graph(), self.node, task['node'])[0][1:]
+				task_executing_path = get_shortest_path(self.comm_task_executer.sql_select_graph(), self.node, task['node'])[0][1:]
 				task_executing_slots = [[datetime.now(), timedelta()]]
 
 			# Set current path and current node moving to
@@ -190,7 +189,7 @@ class AGV_Main:
 				print("Agv " + str(self.id) + ":        Waits " + str(td) + " seconds")
 
 			# Move to node if free	
-			node_position = self.comm_main.sql_get_graph().nodes[self.next_node].pos	
+			node_position = self.comm_task_executer.sql_select_graph().nodes[self.next_node].pos	
 			if not self.action.move_to_pos(node_position): return False
 			self.node = self.next_node
 
@@ -210,41 +209,45 @@ class AGV_Main:
 
 		return True
 
-	def odom_callback(self):
+	def status_updater(self):
+
+		"""
+		This thread continuously updates the state of the robot on the database.
+
+		"""
 
 		# Loop
-		print("AGV-agent:	Odom thread started")
+		print("AGV-agent:	Status updater started")
 		while True:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
-				time.sleep(0.5)
-				print("AGV-agent:	Odom thread killed")
+				print("AGV-agent:	Status updater killed")
 				break
 
 			# Make robot dict
-			robot_dict = {"id": self.id, "ip": self.params['ip'], "port": self.params['port'], "x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "speed": self.speed, "node": self.node,
-				"status": self.status, "battery_status": self.battery_status, "sql_queries": self.sql_queries, "traveled_cost": self.traveled_cost, "traveled_dist": self.traveled_dist, "charged_time": self.charged_time,
+			robot_dict = {"id": self.id, "ip": self.params['ip'], "port": self.params['port'], "x_loc": float(self.x_loc), "y_loc": float(self.y_loc), "theta": float(self.theta), "speed": float(self.speed), "node": self.node,
+				"status": self.status, "battery_status": float(self.battery_status), "sql_queries": self.sql_queries, "traveled_cost": float(self.traveled_cost), "traveled_dist": float(self.traveled_dist), "charged_time": float(self.charged_time),
 				"congestions": self.congestions, "next_node": self.next_node, "current_path": str(self.current_path), "total_path": str(self.total_path), 
-				"task_executing_dist": self.task_executing_dist, "task_executing_cost": self.task_executing_cost, "local_task_list_dist": self.local_task_list_dist, "local_task_list_cost": self.local_task_list_cost, "time_now": datetime.now().strftime('%H:%M:%S')}
+				"task_executing_dist": float(self.task_executing_dist), "task_executing_cost": float(self.task_executing_cost), "local_task_list_dist": float(self.local_task_list_dist), "local_task_list_cost": float(self.local_task_list_cost), "time_now": datetime.now().strftime('%H:%M:%S')}
 
 			# Update robot
-			self.comm_odom_callback.sql_add_to_table('global_robot_list', robot_dict)
-			self.comm_odom_callback.sql_update_robot(self.id, robot_dict)
-
-			# Make robot dict
-			robot_dict = {"x_loc": self.x_loc, "y_loc": self.y_loc, "theta": self.theta, "speed": self.speed, "node": self.node,
-				"status": self.status, "battery_status": self.battery_status, "sql_queries": self.sql_queries, "traveled_cost": self.traveled_cost, "traveled_dist": self.traveled_dist, "charged_time": self.charged_time,
-				"congestions": self.congestions, "next_node": self.next_node, "current_path": str(self.current_path), "total_path": str(self.total_path), 
-				"task_executing_dist": self.task_executing_dist, "task_executing_cost": self.task_executing_cost, "local_task_list_dist": self.local_task_list_dist, "local_task_list_cost": self.local_task_list_cost, "time_now": datetime.now().strftime('%H:%M:%S')}
+			self.comm_status_updater.sql_add_to_table('global_robot_list', robot_dict)
+			self.comm_status_updater.sql_update_robot(self.id, robot_dict)
 
 			# Log data
-			self.comm_odom_callback.sql_add_to_table('robot' + str(self.id), robot_dict)
+			for key in {'id', 'ip', 'port'}: del robot_dict[key]
+			self.comm_status_updater.sql_add_to_table('robot' + str(self.id), robot_dict)
 
 			# Update graph
-			self.graph = self.comm_odom_callback.sql_get_graph()
+			self.graph = self.comm_status_updater.sql_select_graph()
 
 	def alive_checker(self):
+
+		"""
+		This thread continuously checks if robots are still alive. It puts all tasks of a dead robot for auction.
+
+		"""
 
 		# Loop
 		print("AGV-agent:	Alive checker thread started")
@@ -252,7 +255,6 @@ class AGV_Main:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
-				time.sleep(0.6)
 				print("AGV-agent:	Alive checker thread killed")
 				break
 
@@ -263,12 +265,9 @@ class AGV_Main:
 			# Loop over all robots
 			for robot in robots:
 
-				# Skip this robot
-				if robot['id'] == self.id: continue
-
 				# Compute time difference
 				robot_time = datetime.strptime(robot['time_now'], '%H:%M:%S').time()
-				now = (datetime.now() - timedelta(seconds = 5)).time()
+				now = (datetime.now() - timedelta(seconds = self.params['dead_time'])).time()
 
 				# Delete if time differs too much
 				if robot_time < now:
@@ -280,44 +279,21 @@ class AGV_Main:
 					self.comm_alive_checker.sql_delete_from_table('global_robot_list', 'id', robot['id'])
 						
 					# Make all tasks unassigned
-					local_task_list = self.comm_alive_checker.sql_get_local_task_list(robot['id'])
-					task_executing = self.comm_alive_checker.sql_get_executing_task(robot['id'])
+					local_task_list = self.comm_alive_checker.sql_select_local_task_list(robot['id'])
+					task_executing = self.comm_alive_checker.sql_select_executing_task(robot['id'])
 					for task in local_task_list + task_executing: 
 						if not task['message'] in ['homing', 'charging']:
-							task_dict = {'priority': 0, 'robot':-1, 'estimated_start_time': '-', 'estimated_end_time': '-', 'estimated_duration': '-', 'real_start_time': '-', 'real_end_time': '-', 'real_duration': '-', 'progress': 0.0, 'message': '-', 'status': 'unassigned', 'approach': task['approach'], 'task_bids': '-', 'path': '[]', 'slots': '[]'}
+							task_dict = {'priority': 0, 'robot': -1, 'estimated_start_time': '-', 'estimated_end_time': '-', 'estimated_duration': '-', 'real_start_time': '-', 'real_end_time': '-', 'real_duration': '-', 'progress': 0.0, 'message': '-', 'status': 'unassigned', 'approach': task['approach'], "auctioneer": -1, 'task_bids': '{}', "path": '[]', 'slots': '[]', "dist": 0.0, "cost": 0.0}
 							self.comm_alive_checker.sql_update_task(task['id'], task_dict)
 						else:
 							self.comm_alive_checker.sql_delete_from_table('global_task_list', 'id', task['id'])
 
-	def homing(self):
-
-		# Loop
-		print("AGV-agent:	Homing thread started")
-		while True:
-
-			# Timeout and exit event
-			if self.exit_event.wait(timeout=self.params['ro_rate']): 
-				time.sleep(0.7)
-				print("AGV-agent:	Homing thread killed")
-				break
-
-			# Get task executing
-			task_executing = self.comm_homing.sql_get_executing_task(self.id)
-			if task_executing is None or len(task_executing) == 0: continue
-			task_executing = task_executing[0]
-
-			# Get tasks in local task list
-			local_task_list = self.comm_homing.sql_get_local_task_list(self.id)
-			if local_task_list is None: continue
-
-			# Add homing task
-			if not self.node == self.depot and len([task for task in local_task_list if task['message'] == 'homing']) == 0 and not task_executing['message'] == 'homing':
-
-				# Add task to task list
-				task_dict = {"node": self.depot, "priority": 1, "robot": self.id, "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'homing', "status": 'assigned', "approach": '-', 'task_bids': '-', 'path': '[]', 'slots': '[]', 'dist': 0.0, 'cost': 0.0}
-				self.comm_homing.sql_add_to_table('global_task_list', task_dict)
-
 	def progress_tracker(self):
+
+		"""
+		This thread tracks the progress of an executing task.
+
+		"""
 
 		# Loop
 		print("AGV-agent:	Progress tracker thread started")
@@ -325,26 +301,30 @@ class AGV_Main:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
-				time.sleep(0.8)
 				print("AGV-agent:	Progress tracker thread killed")
 				break
 
 			# Get robot
-			robot = self.comm_progress_tracker.sql_get_robot(self.params['id'])
+			robot = self.comm_progress_tracker.sql_select_robot(self.params['id'])
 			if robot is None or len(robot) == 0: continue
-			robot = robot[0]
 
 			# Get task executing
-			task_executing = self.comm_progress_tracker.sql_get_executing_task(robot['id'])
+			task_executing = self.comm_progress_tracker.sql_select_executing_task(robot[0]['id'])
 			if task_executing is None or len(task_executing) == 0: continue
-			task_executing = task_executing[0]
 
 			# Calculate progress
 			progress = round((self.task_executing_dist_done / self.task_executing_total_dist) * 100 if not self.task_executing_total_dist == 0.0 else 0.0)
+			
+			# Update task
 			task_dict = {'progress': progress}
-			self.comm_progress_tracker.sql_update_task(task_executing['id'], task_dict)	
+			self.comm_progress_tracker.sql_update_task(task_executing[0]['id'], task_dict)	
 
 	def performance_monitor(self):
+
+		"""
+		This thread computes the performance of the allocation by computing the costs of the local task list.
+
+		"""
 
 		# Loop
 		print("AGV-agent:	Performance monitor thread started")
@@ -352,38 +332,20 @@ class AGV_Main:
 
 			# Timeout and exit event
 			if self.exit_event.wait(timeout=0.1): 
-				time.sleep(0.9)
 				print("AGV-agent:	Performance monitor thread killed")
 				break
 
-			# Calculate traveled cost
-			self.traveled_cost = (datetime.now() - self.start_time).total_seconds()
-
-			# Calculate sql queries
-			self.sql_queries = self.comm_performance_monitor.sql_queries + self.comm_performance_monitor.sql_queries
-
 			# Get robot
-			robot = self.comm_performance_monitor.sql_get_robot(self.params['id'])
+			robot = self.comm_performance_monitor.sql_select_robot(self.params['id'])
 			if robot is None or len(robot) == 0: continue
-			robot = robot[0]
 
 			# Get task executing
-			task_executing = self.comm_performance_monitor.sql_get_executing_task(self.id)
+			task_executing = self.comm_performance_monitor.sql_select_executing_task(self.id)
 			if task_executing is None: continue
 
 			# Get tasks in local task list
-			local_task_list = self.comm_performance_monitor.sql_get_local_task_list(self.id)
+			local_task_list = self.comm_performance_monitor.sql_select_local_task_list(self.id)
 			if local_task_list is None: continue
-
-			# Calculate dist and cost to next node
-			dist_to_next = self.dist_euclidean((robot['x_loc'], robot['y_loc']), self.comm_performance_monitor.sql_get_graph().nodes[robot['next_node']].pos)
-			cost_to_next = dist_to_next / robot['speed']		
-
-			# Get dists and costs
-			self.task_executing_dist = 0.0 if len(task_executing) == 0 else dist_to_next + task_executing[0]['dist'] 
-			self.task_executing_cost = 0.0 if len(task_executing) == 0 else cost_to_next + task_executing[0]['cost']
-			self.local_task_list_dist = sum([task['dist'] for task in local_task_list])
-			self.local_task_list_cost = sum([task['cost'] for task in local_task_list])
 
 			# Get current path
 			self.current_path = [] if len(task_executing) == 0 else ast.literal_eval(task_executing[0]['path'])
@@ -394,48 +356,46 @@ class AGV_Main:
 				total_path.extend(ast.literal_eval(task['path']))
 			self.total_path = total_path
 
-	def threshold_charging(self):
+			# Calculate traveled cost
+			self.traveled_cost = (datetime.now() - self.start_time).total_seconds()
 
-		# Loop
-		print("AGV-agent:	Threshold charging thread started")
-		while True:
+			# Calculate dist and cost to next node
+			dist_to_next = self.dist_euclidean((robot[0]['x_loc'], robot[0]['y_loc']), self.comm_performance_monitor.sql_select_graph().nodes[robot[0]['next_node']].pos)
+			cost_to_next = dist_to_next / robot[0]['speed']		
 
-			# Timeout and exit event
-			if self.exit_event.wait(timeout=0.1): 
-				time.sleep(1.0)
-				print("AGV-agent:	Threshold charging thread killed")
-				break
+			# Calculate dists and costs
+			self.task_executing_dist = 0.0 if len(task_executing) == 0 else dist_to_next + task_executing[0]['dist'] 
+			self.task_executing_cost = 0.0 if len(task_executing) == 0 else cost_to_next + task_executing[0]['cost']
+			self.local_task_list_dist = sum([task['dist'] for task in local_task_list])
+			self.local_task_list_cost = sum([task['cost'] for task in local_task_list])
 
-			# Get task executing
-			task_executing = self.comm_threshold_charging.sql_get_executing_task(self.id)
-			if task_executing is None or len(task_executing) == 0: continue
-			task_executing = task_executing[0]
+			# If no routing
+			start_node = self.node if len(task_executing) == 0 else task_executing[0]['node'] 
+			self.local_task_list_cost = self.get_local_task_list_cost(start_node, local_task_list) if self.local_task_list_cost == 0 else self.local_task_list_cost
+			self.task_executing_cost = cost_to_next + self.dist_astar(robot[0]['next_node'], start_node)[1] if self.task_executing_cost == 0 else self.task_executing_cost
 
-			# Check charging status
-			if self.status == 'BUSY':
-				if self.battery_status < self.params['battery_threshold']:
+			print("Update:")
+			print("\tNext node: " + str(robot[0]['next_node']))
+			print("\tTask executing: " + str([task['node'] for task in task_executing]))
+			print("\tLocal tasks: " + str([task['node'] for task in local_task_list]))
+			print("\tCurrent path: " + str(self.current_path))
+			print("\tTotal path: " + str(self.total_path))
+			print("\tTraveled cost: " + str(self.traveled_cost))
+			print("\tcost_to_next: " + str(cost_to_next))
+			print("\tTask executing cost: " + str(self.task_executing_cost))
+			print("\tLocal task list cost: " + str(self.local_task_list_cost))
 
-					# Update status to empty
-					self.status = 'EMPTY'
-
-					# Get start node of robot
-					start_node = task_executing['node']
-
-					# Create charging task
-					closest_charging_station = self.search_closest_charging_station(start_node)
-					task_dict = {"node": closest_charging_station, "priority": 0, "robot": self.id, "estimated_start_time": '-', "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": 'charging', "status": 'assigned', "approach": '-', 'task_bids': '-', 'path': '[]', 'slots': '[]', 'dist': 0.0, 'cost': 0.0}
-					self.comm_threshold_charging.sql_add_to_table('global_task_list', task_dict)
-
-	def search_closest_charging_station(self, loc):
-		node = min(self.params['depot_locations'], key=lambda pos: self.dist_astar(pos, loc))
-		return node
+	def get_local_task_list_cost(self, start_node, local_task_list):
+		total_dist = 0.0
+		first_node = start_node
+		for next_node in local_task_list:
+			_, dist = self.dist_astar(first_node, next_node['node'])
+			total_dist += dist
+			first_node = next_node['node']
+		return total_dist
 
 	def dist_astar(self, a, b):
 		return get_shortest_path(self.graph, a, b)
-
-	def search_closest_node(self, loc):
-		node = min(self.graph.nodes.values(), key=lambda node: self.dist_euclidean(node.pos, loc))
-		return node.name
 
 	@staticmethod
 	def dist_euclidean(a, b):

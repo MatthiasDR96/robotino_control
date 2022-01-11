@@ -1,14 +1,10 @@
-import sys
-from datetime import datetime, timedelta
-sys.setrecursionlimit(10000)
 import threading
 import time
 import pickle
 import socket
-from multiprocessing import Pool
-from _thread import start_new_thread
 import os
 import yaml
+import ast
 
 from robotino_core.Comm import Comm
 from robotino_core.solvers.tsp_solver import *
@@ -18,7 +14,8 @@ class AGV_TA_agent:
 
 	"""
 			A class containing the intelligence of the Task Allocation agent. This agent takes care of
-			including new announced tasks into the robots task list
+			task collection from an external MES system, task allocation of new task among robots, 
+			and task switching of assinged tasks to improve the solution.
 	"""
 
 	def __init__(self, params_file):
@@ -29,224 +26,233 @@ class AGV_TA_agent:
 		with open(data_path, 'r') as file:
 			self.params = yaml.load(file, Loader=yaml.FullLoader)
 
-		# Init database communication
-		self.comm_main = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_main.sql_open()
-		self.comm_local_consensus = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		self.comm_local_consensus.sql_open()
+		# Init database communication for all threads
+		self.comm_task_collector = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
+		self.comm_task_allocator = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
+		self.comm_task_switcher = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
+		self.comm_task_scheduler = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
 
 		# Exit event
 		self.exit_event = threading.Event()
 
 		# Processes
 		self.threads = []
-		self.threads.append(threading.Thread(target=self.main))
-		self.threads.append(threading.Thread(target=self.tcp_listener))
-		self.threads.append(threading.Thread(target=self.local_consensus))
+		self.threads.append(threading.Thread(target=self.task_collector))
+		self.threads.append(threading.Thread(target=self.task_allocator))
+		self.threads.append(threading.Thread(target=self.task_switcher))
+		self.threads.append(threading.Thread(target=self.task_scheduler))
 
 	def signal_handler(self, _, __):
-			print("\n\nShutdown TA robot without communication possibilities")
-			self.exit_event.set()
+		print("\n\nShutdown TA-agent")
+		self.exit_event.set()
 
-	def main(self):
+	def task_collector(self):
 
-		# Loop
-		print("\nTA-agent:	Main thread started")
-		while True:
+		"""
+		This thread continuously listens to incoming tasks from an external system at its IP-address. 
+		If a task arrives, it puts it unassigned onto the global task list.
 
-			# Timeout and exit event
-			if self.exit_event.wait(timeout=0.1): 
-				print("\nTA-agent:	Main thread killed")
-				break
-
-			# Get tasks to assign
-			tasks_to_auction = self.comm_main.sql_get_tasks_to_auction(self.params['id'])
-			if tasks_to_auction  is None or len(tasks_to_auction) == 0: continue
-
-			# Get all robots in the fleet
-			robots = self.comm_main.sql_select_everything_from_table('global_robot_list')
-			if robots is None or len(robots) == 0: continue
-
-			# Print
-			print("\nTA-agent:	Auction tasks " + str([task['id'] for task in tasks_to_auction]) + ' to robots ' + str([robot['id'] for robot in robots]))
-
-			# Create all announce messages
-			combinations = []
-			for robot in robots:
-				for task in tasks_to_auction:
-					task['message'] = "announce"
-					combinations.append((robot['ip'], robot['port'], task))
-
-			# Send all announcement messages and receive all bids
-			self.p = Pool(processes=max(1, len(combinations)))
-			bids = self.p.starmap(tcp_client, combinations)
-			bids = [bid for bid in bids if bid is not None] # Remove all None bids
-
-			# If there are valid bids
-			if len(bids) > 0: 
-					
-				# Resolution
-				best_bid = self.resolution_lb(bids) 
-
-				# Collect all bids on that task
-				all_bids = {p['robot']['id']: p['values'][0] for p in bids if p['task'] == best_bid['task']}
-
-				# Send task to winning robot
-				robot = best_bid['robot']
-				best_bid['task']['message'] = 'assign'
-				best_bid['task']['robot'] = robot['id']
-				best_bid['task']['task_bids'] = all_bids
-				tcp_client(robot['ip'], robot['port'], best_bid['task'])
-				print("TA-agent:	Assigns task " + str(best_bid['task']['id']) + ' to robot ' + str(robot['id']))
-
-
-	def tcp_listener(self):
+		"""
 
 		# Open tcp server
-		print("TA-agent:	TCP listener thread started")
+		print("\nTA-agent:	Task collector thread started")
 		with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock_server:
-
-			# Set socket
 			sock_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) 
 			sock_server.bind((self.params['ip'], self.params['port']))
 			sock_server.listen()
-			sock_server.settimeout(1)
+			sock_server.settimeout(None)
 			time.sleep(1)
 
 			# Loop
 			while True:
 
 				# Listening for incomming messages
+				print("\nTA-agent:	Listening for incoming tasks...")
+				conn, _ = sock_server.accept()
+
+				# Receive the data and retransmit it
+				with conn:
+					data = conn.recv(1024)
+					conn.sendall(data)
+								
+				# Convert data to dictionary
 				try:
-					conn, _ = sock_server.accept()
+					data = pickle.loads(data)
+				except EOFError:
+					data = None
+				print("\nTA-agent:	Received task " + str(data))
 
-					# Handle in separate thread
-					start_new_thread(self.handle_client, (conn,))
+				# Get all tasks
+				tasks = self.comm_task_collector.sql_select_everything_from_table('global_task_list')
+				if tasks is None: continue
 
-				except socket.timeout as e:
-					pass
+				# Put unnasigned task on global task list if not present yet
+				print(str([task for task in tasks if task["order_number"] == data['order_number']]))
+				if len([task for task in tasks if task["order_number"] == data['order_number']]) == 0:
+					task_dict = {"order_number": data['order_number'], "node": data['node'], "priority": 0, "robot": -1, "estimated_start_time": "-", "estimated_end_time": "-", "estimated_duration": "-", "real_start_time": "-", "real_end_time": "-", "real_duration": "-", "progress": 0.0, "message": "-", "status": 'unassigned', "approach": data["approach"], "auctioneer": -1, "task_bids": '{}',"path": '[]', "slots": "[]", "dist": 0.0, "cost": 0.0}
+					self.comm_task_collector.sql_add_to_table('global_task_list', task_dict)
 
-				# Timeout and exit event
-				if self.exit_event.wait(timeout=0.1): 
-					time.sleep(0.5)
-					print("TA-agent:	TCP listener thread killed")
-					break
+	def task_allocator(self):
 
-	def handle_client(self, conn):
+		"""
+		This thread continuously reviews all tasks in the global_task_list that are unassigned and places a bid on this task. 
+		If it sees that after placing the bid, the number of placed bids equals the number of robots in the system, it selects 
+		the robot with the best bid and allocates the task to this robot. It does this at a certain 'task_allocator_rate'.
 
-		# Open database connection
-		comm = Comm(self.params['ip'], self.params['port'], self.params['host'], self.params['user'], self.params['password'], self.params['database'])
-		comm.sql_open()
-
-		# Receive message
-		data = conn.recv(2024)
-							
-		# Convert data to dictionary
-		task = pickle.loads(data)
-		# print('\nAGV ' + str(self.params['id']) +'         Received task: ' + str(task['id']))
-
-		# Compute bid or add directly to local task list
-		if task['message'] == 'announce':
-
-			# Get local task list
-			local_task_list = comm.sql_get_local_task_list(self.params['id'])
-
-			# Compute bid
-			bid_value_list = self.compute_bid(local_task_list, task, False, comm)
-
-			# Make robot dict
-			robot = {'id': self.params['id'], 'ip': self.params['ip'], 'port': self.params['port']}
-
-			# Make bid dict
-			bid = {'values': bid_value_list, 'robot': robot, 'task': task} if bid_value_list is not None else None
-
-			# Send bid to the auctioneer
-			conn.sendall(pickle.dumps(bid))
-
-		elif task['message'] == 'assign':
-
-			# TODO tsp
-
-			# Add assigned tasks optimally to local task list
-			task_dict = {'robot': self.params['id'], 'status': 'assigned', 'priority': 1, 'task_bids': str(task['task_bids']), 'message': 'assign'}
-			comm.sql_update_task(task['id'], task_dict)
-
-		# Close connection
-		conn.close()
-		comm.sql_close()
-
-	def local_consensus(self):
+		"""
 
 		# Loop
-		print("TA-agent:	Local consensus thread started")
+		print("TA-agent:	Task allocator thread started")
 		while True:
 
 			# Timeout and exit event
-			if self.exit_event.wait(timeout=self.params['local_consensus_rate']): 
-				time.sleep(1.0)
-				print("TA-agent:	Local consensus thread killed")
+			if self.exit_event.wait(timeout=self.params['task_allocator_rate']): 
+				print("\nTA-agent:	Task allocator thread killed")
 				break
 
-			# Get tasks to assign
-			tasks_to_assign = self.comm_local_consensus.sql_get_local_task_list(self.params['id'])
-			if tasks_to_assign is None or len(tasks_to_assign) == 0: continue
+			# Get unnasigned tasks
+			unassigned_tasks = self.comm_task_allocator.sql_select_unassigned_tasks()
+			if unassigned_tasks is None or len(unassigned_tasks) == 0: continue
 
-			# Filter out homing and charging tasks
-			tasks_to_assign = [task for task in tasks_to_assign if not task['message'] == 'homing' and not task['message'] == 'charging']
-			if tasks_to_assign is None or len(tasks_to_assign) == 0: continue
-
-			# Get all robots in the fleet except this one
-			robots = self.get_all_robots_exept_this(self.comm_local_consensus)
+			# Get all robots in the fleet
+			robots = self.comm_task_allocator.sql_select_everything_from_table('global_robot_list')
 			if robots is None or len(robots) == 0: continue
+
+			# Get local task list
+			local_task_list = self.comm_task_allocator.sql_select_local_task_list(self.params['id'])
+			if local_task_list is None: continue
+
+			# Get unassigned tasks not yet bid on
+			unassigned_tasks = [task for task in unassigned_tasks if self.params['id'] not in ast.literal_eval(task['task_bids']).keys()]
+			if len(unassigned_tasks) == 0: continue 
+
+			# Get first unassinged task and convert taks to dictionary
+			task = unassigned_tasks[0]
+			task_bids = ast.literal_eval(task['task_bids'])
+
+			# Compute bid list and select bid regarding objective index
+			bid_value_list = self.compute_bid(local_task_list, task, False, self.comm_task_allocator)
+			bid = 1000 if not bid_value_list else bid_value_list[self.params['objective_index']]
+
+			# Place bid at task
+			task_bids[self.params['id']] = bid
+			task_dict = {'task_bids': str(task_bids)}
+			self.comm_task_allocator.sql_update_task(task['id'], task_dict)
+
+			# Allocate task
+			if len(task_bids.keys()) >= len(robots):
+				winner_id = min(task_bids, key=task_bids.get)
+				task_dict = {'robot': winner_id, 'status': 'assigned'}
+				self.comm_task_allocator.sql_update_task(task['id'], task_dict)			
+
+	def task_switcher(self):
+
+		"""
+		This thread continuously reviews all tasks in the global_task_list that are assigned to robots and looks 
+		if a better solution could be found. It does this at a certain 'task_swither_rate'.
+
+		"""
+
+		# Loop
+		print("TA-agent:	Task switcher thread started")
+		while True:
+
+			# Timeout and exit event
+			if self.exit_event.wait(timeout=self.params['task_switcher_rate']): 
+				print("TA-agent:	Task switcher thread killed")
+				break
+
+			# Get asigned tasks
+			assigned_tasks = self.comm_task_switcher.sql_select_assigned_tasks()
+			if assigned_tasks is None or len(assigned_tasks) == 0: continue
+
+			# Get local task list
+			local_task_list = self.comm_task_switcher.sql_select_local_task_list(self.params['id'])
+			if local_task_list is None: continue
 			
-			# Create all announce messages
-			combinations = []
-			for robot in robots:
-				for task in tasks_to_assign:
-					task['message'] = "announce"
-					combinations.append((robot['ip'], robot['port'], task))
-
-			# Send all announcement messages and receive all bids
-			self.p = Pool(processes=max(1, len(combinations)))
-			bids = self.p.starmap(tcp_client, combinations)
-			bids = [bid for bid in bids if bid is not None] # Remove all None bids = AGV not participating
-
-			# If there are valid bids
-			if len(bids) > 0: 
-								
-				# Resolution
-				best_bid_list = self.resolution_lb(bids)
-				best_bid = best_bid_list['values'][0]
-
-				# My bid
-				my_bid_list = self.compute_bid(tasks_to_assign, task, True, self.comm_local_consensus)
-
-				# If I want to participate
-				my_bid = float('inf') if my_bid_list is None else my_bid_list[0]
+			# Pick random task and convert task to dictionary
+			task = assigned_tasks[random.randint(0, len(assigned_tasks)-1)]
+			task_bids = ast.literal_eval(task['task_bids'])
 				
-				# If best bid is better than my bid
-				if best_bid + my_bid < 0:
+			# Compute bid different if it is my own task compared to if it is another robot's task
+			subtract = True if task['robot'] == self.params['id'] else False
+			bid_multiplier = -1 if task['robot'] == self.params['id'] else 1
 
-					# Send task to winning robot
-					print("Better solution found")
-					robot = best_bid_list['robot']
-					best_bid_list['task']['message'] = 'assign'
-					best_bid_list['task']['robot'] = robot['id']
-					tcp_client(robot['ip'], robot['port'], best_bid_list['task'])
+			# Compute bid list and select bid regarding objective index
+			bid_value_list = self.compute_bid(local_task_list, task, subtract, self.comm_task_switcher)
+			bid = 1000 if not bid_value_list else bid_value_list[self.params['objective_index']]
+
+			# Place bid at task
+			task_bids[self.params['id']] = bid * bid_multiplier
+			task_dict = {'task_bids': str(task_bids)}
+			self.comm_task_switcher.sql_update_task(task['id'], task_dict)
+
+			# Allocate task
+			winner_id = min(task_bids, key=task_bids.get)
+			task_dict = {'robot': winner_id}
+			self.comm_task_switcher.sql_update_task(task['id'], task_dict)	
+
+	def task_scheduler(self):	
+
+		"""
+		This thread continuously updates the order of the local task list. It does this at a certain 'task_scheduler_rate'.
+
+		"""
+
+		# Loop
+		print("TA-agent:	Task scheduler thread started")
+		while True:
+
+			# Timeout and exit event
+			if self.exit_event.wait(timeout=self.params['task_scheduler_rate']): 
+				print("TA-agent:	Task scheduler thread killed")
+				break
+
+			# Get graph
+			self.graph = self.comm_task_scheduler.sql_select_graph()
+			if self.graph is None: return None
+
+			# Get robot
+			robot = self.comm_task_scheduler.sql_select_robot(self.params['id'])
+			if robot is None or len(robot) == 0: return None
+
+			# Get task executing
+			task_executing = self.comm_task_scheduler.sql_select_executing_task(self.params['id'])
+			if task_executing is None: return None
+
+			# Get local task list
+			local_task_list = self.comm_task_scheduler.sql_select_local_task_list(self.params['id'])
+			if local_task_list is None: continue
+
+			# Get start node and new local task list
+			start_node = robot[0]['node'] if len(task_executing) == 0 else task_executing[0]['node']
+
+			# Execute tsp using astar routing and only node names of the tasks
+			nodes_to_visit = [task['node'] for task in local_task_list]
+			solution = tsp(start_node, nodes_to_visit, self.dist_astar)
+
+			# Convert task node names back to tasks including homing task
+			sequence = [local_task_list[nodes_to_visit.index(name)] for name in solution['sequence']] 
+
+			# Update priorities
+			for priority, task in enumerate(sequence):
+				task_dict = {'priority': priority + 1}
+				self.comm_task_scheduler.sql_update_task(task['id'], task_dict)		
+
 				
 	def compute_bid(self, local_task_list, new_task, substract, comm):
 
 		"""
 
 		Computes the difference between the estimated current cost of the local task list and the 
-		estimated cost of the local task list including the new task, as well as the estimated 
-		start time, end time, and duration of the new task
+		estimated cost of the local task list including/excluding the new task. The estimated current 
+		cost is calculated by a performance monitor thread in the main vehicle agent.
 
 		Input:
 			- Local task list
 			- New task
 			- Substract the new task from the local task list or add it 
-			- Communication layer
+			- Communication layer object
 		Output:
 			- Objective list
 
@@ -258,122 +264,43 @@ class AGV_TA_agent:
 		assert isinstance(substract, bool)
 		assert isinstance(comm, Comm)
 
-		### Inputs ###
+		# Get graph
+		self.graph = comm.sql_select_graph()
+		if self.graph is None: return None
 
 		# Get robot
-		robot = comm.sql_get_robot(self.params['id'])
-		if robot is None or len(robot) == 0: return None
-		robot = robot[0]
+		robot = comm.sql_select_robot(self.params['id'])
+		if robot is None or len(robot) == 0 : return None
 
 		# Get task executing
-		task_executing = comm.sql_get_executing_task(robot['id'])
+		task_executing = comm.sql_select_executing_task(self.params['id'])
 		if task_executing is None: return None
 
-		### Quit statements ###
-
-		# Only for adding task
-		if not substract:
-
-			# Do not bid on task that is already in local task list
-			if new_task['node'] in [task['node'] for task in local_task_list] or new_task['node'] == robot['node']: return None
-
-			# Do not bid on task that is already executing
-			if not len(task_executing) == 0: 
-				if new_task['node'] == task_executing[0]['node']: return None
-
-		### Current cost ###
-
-		# Get current cost
-		current_cost = robot['local_task_list_cost']
-	
-		### New cost ###
-
-		# Start node
-		start_node = robot['node'] if len(task_executing) == 0 else task_executing[0]['node']
-			
-		# Remove homing node
-		local_task_list = [task for task in local_task_list if not task['message'] == 'homing']
-
-		# Get new local task list
+		# Get start node and new local task list
+		start_node = robot[0]['node'] if len(task_executing) == 0 else task_executing[0]['node']
 		new_local_task_list = local_task_list + [new_task] if not substract else [t for t in local_task_list if t['id'] != new_task['id']]
-		
-		# Get graph
-		self.graph = comm.sql_get_graph()
 
-		# Extract only node names from tasks without homing task
+		# Check if task occurs twice in list of all nodes
+		all_nodes = [task['node'] for task in new_local_task_list] + [start_node]
+		if not len(set(all_nodes)) == len(all_nodes): return None
+
+		# Execute tsp using astar routing and only node names of the tasks
 		nodes_to_visit = [task['node'] for task in new_local_task_list]
-
-		# Do tsp using astar routing
 		solution = tsp(start_node, nodes_to_visit, self.dist_astar)
-		new_costs= solution['dists']
 
-		# Convert task node names back to tasks including homing task
-		new_sequence = [new_local_task_list[nodes_to_visit.index(name)] for name in solution['sequence']]
+		# TODO: Insert optimal charging station (remove charging station, and add new if necessary)
 
-		### Bid calculation ###
+		# TODO: Compute dmas routes between stations
 
-		# Marginal cost to execute task
-		min_sum = sum(new_costs) - current_cost
-		min_max = sum(new_costs)
+		# Compute miniSum and miniMax objective values using the new and current costs of the local task list
+		min_sum = sum(solution['dists']) - robot[0]['local_task_list_cost']
+		min_max = sum(solution['dists'])
 
-		# Compute start, end and duration
-		if not substract:
-			task_index = new_sequence.index(new_task)
-			start_time = timedelta(seconds=sum(new_costs[0:task_index])) + datetime.now()
-			end_time = timedelta(seconds=sum(new_costs[0:task_index+1])) + datetime.now()
-			duration = end_time - start_time
-		else:
-			start_time = 0.0
-			end_time = 0.0
-			duration = 0.0
-
-		# Objective
+		# Compute objective list
 		objective = self.params['epsilon'] * min_sum + (1 - self.params['epsilon']) * min_max
-
-		### Output ###
-
-		# Objective list
-		objective_list = [objective, min_sum, min_max, start_time, end_time, duration]
+		objective_list = [objective, min_sum, min_max]
 
 		return objective_list
 
 	def dist_astar(self, a, b):
 		return get_shortest_path(self.graph, a, b)
-
-	def get_all_robots_exept_this(self, comm):
-		items = comm.sql_select_everything_from_table('global_robot_list')
-		if items is not None:
-			items_ = [robot for robot in items if robot['id'] != self.params['id']]
-		else:
-			items_ = []
-		return items_ 
-
-	def resolution_lb(self, bids):
-		bids.sort(key=lambda p: p['values'][0])
-		best_bid = bids[0] 
-		return best_bid
-
-def tcp_client(ip, port, data):
-
-	try:
-
-		# Create a TCP/IP socket
-		with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-
-			# Make message
-			pickled_data = pickle.dumps(data)
-
-			# Connect the socket to the port where the server is listening
-			sock.connect((ip, port))
-								
-			# Send data
-			sock.sendall(pickled_data)
-
-			# Look for the response
-			data = sock.recv(2024)
-			rec_data_loaded = pickle.loads(data)
-			return rec_data_loaded
-
-	except:
-		#print("Central auctioneer:		Received nothing")
-		return None	

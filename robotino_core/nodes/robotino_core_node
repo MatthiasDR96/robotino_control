@@ -2,7 +2,7 @@
 
 import signal
 import rospy
-from robotino_core.agv.AGV_ROS import AGV_ROS
+from robotino_core.agv.AGV_Main_ROS import AGV_Main_ROS
 
 if __name__== '__main__':
 
@@ -14,7 +14,7 @@ if __name__== '__main__':
 
 	# Start AGV ROS
 	rospy.init_node("robotino_" + str(id))
-	agv_ros = AGV_ROS(params_file)
+	agv_ros = AGV_Main_ROS(params_file)
 	threads = agv_ros.threads
 
 	# Start processes
