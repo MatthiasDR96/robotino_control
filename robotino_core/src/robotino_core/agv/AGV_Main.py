@@ -113,7 +113,7 @@ class AGV_Main:
 			if self.status != 'EMPTY': self.status = 'BUSY'
 
 			# Do not execute
-			exit()
+			#exit()
 
 			# Remove from local task list and add task to executing list
 			task_executing_start_time = datetime.now()
@@ -161,6 +161,7 @@ class AGV_Main:
 
 		# Move from node to node until end node reached
 		self.task_executing_dist_done = 0
+		
 		while not self.node == task['node']:
 
 			# Get executing task

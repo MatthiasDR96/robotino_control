@@ -296,6 +296,12 @@ class AGV_TA_agent:
 		min_sum = sum(solution['dists']) - robot[0]['local_task_list_cost']
 		min_max = sum(solution['dists'])
 
+
+		print(f"Bid on task: {new_task['node']}")
+		print(f"Current cost: {robot[0]['local_task_list_cost']}")
+		print(f"New cost: {sum(solution['dists'])}")
+
+
 		# Compute objective list
 		objective = self.params['epsilon'] * min_sum + (1 - self.params['epsilon']) * min_max
 		objective_list = [objective, min_sum, min_max]

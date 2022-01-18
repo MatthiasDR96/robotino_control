@@ -99,6 +99,19 @@ class Comm:
 			return None
 
 	### Select from database ###
+
+	def sql_select_from_table(self, table, value):
+		assert isinstance(table, str)
+		sql = "SELECT * FROM graph WHERE name = %s"
+		val = (value,)
+		try:
+			self.conn.reconnect()
+			self.cursor.execute(sql, val)
+			result = self.cursor.fetchall()
+			return result
+		except:
+			print("Database not alive1")	
+			return False
 		
 	def sql_select_everything_from_table(self, table):
 		assert isinstance(table, str)
@@ -344,4 +357,15 @@ class Comm:
 			return True
 		except:
 			print("Database not alive15")	
+			return False
+
+	def sql_update_graph(self, node, neighbors):
+		sql = f"UPDATE graph SET neighbors = %s WHERE name = '{node}'"
+		val = (neighbors,)
+		try:
+			self.cursor.execute(sql, val)
+			self.conn.commit()
+			return True
+		except:
+			print("Database not alive16")	
 			return False

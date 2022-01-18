@@ -76,11 +76,6 @@ class Graph:
 
         # To annotate nodes or paths
         color = matplotlib.cm.rainbow(np.linspace(0, 1, len(paths)))
-        for node in nodes:
-            node_name = node[0]
-            marker = node[1]
-            marker_size = node[2]
-            ax.plot(self.nodes[node_name].pos[0], self.nodes[node_name].pos[1], marker, ms=marker_size)
         j = 0
         for path in paths:
             for i in range(len(path) - 1):
@@ -89,6 +84,11 @@ class Graph:
                         [self.nodes[path[i]].pos[1], self.nodes[path[i + 1]].pos[1]], color=color[j], lw=2.5)
             ax.plot(self.nodes[path[-1]].pos[0], self.nodes[path[-1]].pos[1], color=color[j], marker='s', ms=5)
             j += 1
+        for node in nodes:
+            node_name = node[0]
+            marker = node[1]
+            marker_size = node[2]
+            ax.plot(self.nodes[node_name].pos[0], self.nodes[node_name].pos[1], marker, ms=marker_size)
 
     @staticmethod
     def __euclidean_distance(a, b):

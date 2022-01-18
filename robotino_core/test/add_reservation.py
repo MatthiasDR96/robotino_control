@@ -2,8 +2,7 @@ from robotino_core.Comm import Comm
 from datetime import datetime, timedelta
 
 # Open connection to database
-comm = Comm('localhost', 10015, 'localhost', 'matthias', 'matthias', 'kb')
-comm.sql_open()
+comm = Comm('127.0.0.1', 10015, '127.0.0.1', 'root', 'abc123', 'kb')
 			
 # Make reservation
 node = 'pos_7'

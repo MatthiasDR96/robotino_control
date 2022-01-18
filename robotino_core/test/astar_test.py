@@ -1,13 +1,13 @@
 import matplotlib.pyplot as plt
-import robotino_core.solvers.astar_solver_multi as asm
+import robotino_core.solvers.astar_solver as asm
 from robotino_core.Comm import Comm
 
 # Init database communication
-comm = Comm('localhost', 10015, 'localhost', 'matthias', 'matthias', 'kb')
-comm.sql_open()
+comm = Comm('127.0.0.1', 10015, '127.0.0.1', 'root', 'abc123', 'kb')
 
 # Get graph
-graph = comm.get_graph()
+graph = comm.sql_select_graph()
+print(graph)
 
 # Start location
 start = 'pos_1'

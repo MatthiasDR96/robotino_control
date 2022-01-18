@@ -1,6 +1,6 @@
 @startuml connection_diagram
 
-package "Decentral Fleet Management Framework" {
+package "Decentral Control Framework" {
 
     [Communication_layer]
     [Vehicle_Agent]
@@ -10,32 +10,28 @@ package "Decentral Fleet Management Framework" {
 
 }
 
-database "MySql" {
+database "Database" {
 
     [global_robot_list]
     [global_task_list]
 
 }
 
-[global_robot_list] -[hidden]- [global_task_list]
-[Webserver] -[hidden]- [Vehicle]
+[Vehicle] -> [Communication_layer] : ROS
+[Vehicle] <- [Communication_layer] : HMI
+[Vehicle] --> Action : Operator
 
-[global_task_list] -> [Vehicle]
-[Vehicle] -> [global_robot_list]
-[Vehicle] -> Action
-
-[global_task_list] -> [Webserver]
-[global_robot_list] -> [Webserver]
+[global_task_list] -> [Webserver] : SQL
 [Webserver] -> HTTP
 
-[TA_Agent] <--> [Communication_layer]
-[RO_Agent] <--> [Communication_layer]
-[RM_Agent] <--> [Communication_layer]
-[Vehicle_Agent] <--> [Communication_layer]
+[TA_Agent] <--> [Communication_layer] : SQL
+[RO_Agent] <--> [Communication_layer] : SQL
+[RM_Agent] <--> [Communication_layer] : SQL
+[Vehicle_Agent] <--> [Communication_layer] : SQL
 
-[Communication_layer] <--> [global_task_list]
-[Communication_layer] <--> [global_robot_list]
+[Communication_layer] <--> [global_task_list] : SQL
+[Communication_layer] <--> [global_robot_list] : SQL
 
-[MES] --> [TA_Agent]
+[MES] -> [Communication_layer] : Wifi
 
 @enduml

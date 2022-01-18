@@ -1,45 +1,5 @@
 @startuml class_diagram
 
-class Action {
-
-    {static} Vehicle vehicle
-
-    +{abstract} move_to_pos()
-    +{abstract} cancel_goal()
-    +{abstract} pick()
-    +{abstract} place()
-
-}
-
-class Vehicle {
-
-    {static} Comm comm
-    {static} Action action
-
-    {static} int id
-    {static} str status
-    
-    {static} float x_loc
-    {static} float y_loc
-    {static} float theta
-    {static} float speed
-    {static} float battery_status
-
-    {static} Thread task_executer
-    {static} Thread status_updater
-    {static} Thread alive_checker
-    {static} Thread progress_tracker
-    {static} Thread performance_monitor
-
-    +{abstract} task_executer()
-    +{abstract} execute_task()
-    +{abstract} status_updater()
-    +{abstract} alive_checker()
-    +{abstract} progress_tracker()
-    +{abstract} performance_monitor()
-
-}
-
 class TA_Agent {
 
     {static} Comm comm
@@ -81,6 +41,7 @@ class RM_Agent {
 
 }
 
-Vehicle "1" o-- Action : aggregation
+TA_Agent -right[hidden]-> RO_Agent
+RO_Agent -right[hidden]-> RM_Agent
 
 @enduml

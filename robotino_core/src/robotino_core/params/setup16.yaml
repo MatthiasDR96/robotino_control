@@ -18,11 +18,11 @@ resource_scale_factor: 1
 resource_consumption_factor: 1
 
 epsilon: 1.0
-objective_index: 0
+objective_index: 1
 
 dead_time: 5
 task_allocator_rate: 1
-task_switcher_rate: 5
+task_switcher_rate: 1
 task_scheduler_rate: 1
 route_planner_rate: 1
 route_evaporator_rate: 1.5
