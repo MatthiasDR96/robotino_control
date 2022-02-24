@@ -21,13 +21,13 @@ class AGV_Main_ROS(AGV_Main):
 		super().__init__(params_file)
 
 		# Overwrite action layer
-		self.action.move_to_pos = self.move_to_pos
-		self.action.cancel_goal = self.cancel_goal
-		self.action.pick = self.pick
-		self.action.place = self.place
+		#self.action.move_to_pos = self.move_to_pos
+		#self.action.cancel_goal = self.cancel_goal
+		#self.action.pick = self.pick
+		#self.action.place = self.place
 
 		# Action client
-		self.client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+		#self.client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
 		#self.server = actionlib.SimpleActionServer('move_base', MoveBaseAction, self.active_cb, auto_start=False)
 		#self.server.start()
 		

@@ -8,7 +8,14 @@ class AGV_Action:
         # AGV
         self.agv = agv
 
-    def move_to_pos(self, node_position):
+    def move_to_pos_manual(self, node_position):
+        cur_pos = (self.agv.x_loc, self.agv.y_loc)
+        rho = self.agv.dist_euclidean(cur_pos, node_position)
+        while rho > 0.1:
+            cur_pos = (self.agv.x_loc, self.agv.y_loc)
+            rho = self.agv.dist_euclidean(cur_pos, node_position)
+
+    def move_to_pos_autonomous(self, node_position):
         
         # Temp pos
         tmp_x = self.agv.x_loc

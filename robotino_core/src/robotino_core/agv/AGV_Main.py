@@ -46,7 +46,7 @@ class AGV_Main:
 		self.y_loc = self.comm_task_executer.sql_select_graph().nodes[self.depot].pos[1]
 		self.theta = 0.0
 		self.speed = self.params['robot_speed']
-		self.node = self.depot
+		self.node = self.search_closest_node((self.x_loc, self.y_loc))
 		self.status = 'IDLE'
 		self.battery_status = 100.0
 
@@ -161,7 +161,6 @@ class AGV_Main:
 
 		# Move from node to node until end node reached
 		self.task_executing_dist_done = 0
-		
 		while not self.node == task['node']:
 
 			# Get executing task
@@ -394,6 +393,11 @@ class AGV_Main:
 			total_dist += dist
 			first_node = next_node['node']
 		return total_dist
+
+	def search_closest_node(self, loc):
+		graph = self.comm_task_executer.sql_select_graph()
+		nodes = graph.nodes.values()
+		return min(nodes, key=lambda node: self.dist_euclidean(node.pos, loc))
 
 	def dist_astar(self, a, b):
 		return get_shortest_path(self.graph, a, b)

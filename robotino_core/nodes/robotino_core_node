@@ -3,6 +3,8 @@
 import signal
 import rospy
 from robotino_core.agv.AGV_Main_ROS import AGV_Main_ROS
+from robotino_core.agv.AGV_TA_agent import AGV_TA_agent
+from robotino_core.agv.AGV_RO_agent import AGV_RO_agent
 
 if __name__== '__main__':
 
@@ -12,10 +14,27 @@ if __name__== '__main__':
 	# Params file
 	params_file = 'setup' + str(id) + '.yaml'
 
-	# Start AGV ROS
+	# Init
+	events = []
+	threads = []
+
+	# Start ROS node
 	rospy.init_node("robotino_" + str(id))
-	agv_ros = AGV_Main_ROS(params_file)
-	threads = agv_ros.threads
+
+	# Start AGV-agent
+	agv_main = AGV_Main_ROS(params_file)
+	threads.extend(agv_main.threads)
+	events.append(agv_main.exit_event)
+
+	# Start TA-agent
+	ta_agent = AGV_TA_agent(params_file)
+	threads.extend(ta_agent.threads)
+	events.append(ta_agent.exit_event)
+
+	# Start RO-agent
+	ro_agent = AGV_RO_agent(params_file)
+	threads.extend(ro_agent.threads)
+	events.append(ro_agent.exit_event)
 
 	# Start processes
 	for thread in threads:
@@ -23,7 +42,7 @@ if __name__== '__main__':
 
 	# Exit handler function
 	def signal_handler(_, __):
-		agv_ros.exit_event.set()
+		agv_main.exit_event.set()
 		rospy.signal_shutdown('CTRL-C pressed.')
 
 	# Exit handler
