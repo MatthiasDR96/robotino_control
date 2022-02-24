@@ -12,7 +12,7 @@ class Avoid():
 	def __init__(self):
 
 		# Init node
-		rospy.init_node('robotino_patrol', anonymous=False)
+		rospy.init_node('robotino_avoid', anonymous=False)
 		rospy.on_shutdown(self.shutdown)
 
 		# Init publisher

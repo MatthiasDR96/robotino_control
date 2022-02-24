@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import rospy
-import tf
 import os
 import yaml
 from geometry_msgs.msg import Twist
@@ -84,8 +83,8 @@ class Patrol():
 
 if __name__ == '__main__':
 
-	#try:
+	try:
 		Patrol()
 		rospy.spin()
-	#except:
-		#rospy.loginfo("Shutdown program.")
+	except:
+		rospy.loginfo("Shutdown program.")

@@ -12,14 +12,11 @@ class PatrolStop():
 	def __init__(self):
 
 		# Init node
-		rospy.init_node('robotino_patrol_stop', anonymous=False)
+		rospy.init_node('robotino_patrol', anonymous=False)
 		rospy.on_shutdown(self.shutdown)
 
 		# Init publisher
 		self.cmd_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
-
-		# Init transfrom listener
-		self.tf_listener = tf.TransformListener()
 
 		# Create traject controller
 		self.controller = Controller()
@@ -32,14 +29,14 @@ class PatrolStop():
 
 		# Get point sequence
 		this_dir = os.path.dirname(os.path.dirname(__file__))
-		data_path = os.path.join(this_dir, "locations", rospy.get_param("/locations"))
+		data_path = os.path.join(this_dir, "locations", rospy.get_param("/robotino_patrol/locations"))
 		with open(data_path, 'r') as file:
-			locations = yaml.load(file, Loader=yaml.FullLoader)
+			locations = yaml.load(file, Loader=yaml.FullLoader)['node_locations'][0]
 
 		# Loop over locations
 		while not rospy.is_shutdown():
 			for point in locations:
-				self.go_to_point(point)
+				self.go_to_point(locations[point])
 
 	def go_to_point(self, goal):
 

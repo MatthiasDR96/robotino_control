@@ -48,6 +48,7 @@ catkin_install_python(PROGRAMS
   nodes/robotino_patrol.py
   nodes/robotino_patrol_stop.py
   nodes/robotino_patrol_avoid.py
+  nodes/robotino_set_points.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

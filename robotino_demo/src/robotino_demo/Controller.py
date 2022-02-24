@@ -32,8 +32,6 @@ class Controller():
 
 	def get_goal_location(self, goal):
 
-		print(goal)
-
 		# Get 3D pose
 		x = goal[0]
 		y = goal[1]
