@@ -1,4 +1,4 @@
-locations: locations_cp.yaml
+locations: test.yaml
 
 navigation:
   linear_speed_limit: 0.3

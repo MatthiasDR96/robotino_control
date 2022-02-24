@@ -1,8 +1,0 @@
-<launch>
-
-  <!-- Move to point node -->
-  <node pkg="robotino_example" type="robotino_pointop_key.py" name="robotino_pointop_keyboard"  output="screen">
-    <rosparam file="$(find robotino_example)/param/examples_params.yaml" command="load" />
-  </node>
-
-</launch>

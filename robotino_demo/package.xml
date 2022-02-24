@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <package format="2">
 
-  <name>robotino_example</name>
+  <name>robotino_demo</name>
   <version>1.0.0</version>
-  <description>This package provides some example scripts</description>
+  <description>This package provides some demo nodes</description>
 
   <license>BSD</license>
   <author email="matthias.deryck@kuleuven.be">Matthias De Ryck</author>

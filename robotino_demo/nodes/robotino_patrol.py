@@ -18,9 +18,6 @@ class Patrol():
 		# Init publisher
 		self.cmd_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
 
-		# Init transfrom listener
-		self.tf_listener = tf.TransformListener()
-
 		# Create traject controller
 		self.controller = Controller()
 
@@ -32,14 +29,14 @@ class Patrol():
 
 		# Get point sequence
 		this_dir = os.path.dirname(os.path.dirname(__file__))
-		data_path = os.path.join(this_dir, "locations", rospy.get_param("/locations"))
+		data_path = os.path.join(this_dir, "locations", rospy.get_param("/robotino_patrol/locations"))
 		with open(data_path, 'r') as file:
-			locations = yaml.load(file, Loader=yaml.FullLoader)
+			locations = yaml.load(file, Loader=yaml.FullLoader)['node_locations'][0]
 
 		# Loop over positions
 		while not rospy.is_shutdown():
 			for point in locations:
-				self.go_to_point(point)
+				self.go_to_point(locations[point])
 
 	def go_to_point(self, goal):
 
@@ -73,7 +70,7 @@ class Patrol():
 			goal_pos = self.controller.get_goal_location(goal)
 
 			# Collision avoidance
-			vel, omega, error = self.move_towards_goal(cur_pos, goal_pos)
+			vel, omega, error = self.controller.move_towards_goal(cur_pos, goal_pos)
 
 			# Publish command
 			cmd = Twist()
@@ -82,13 +79,13 @@ class Patrol():
 			self.cmd_pub.publish(cmd)
 
 	def shutdown(self):
-		self.cmd_vel.publish(Twist())
+		self.cmd_pub.publish(Twist())
 		rospy.sleep(1)
 
 if __name__ == '__main__':
 
-	try:
+	#try:
 		Patrol()
 		rospy.spin()
-	except:
-		rospy.loginfo("Shutdown program.")
+	#except:
+		#rospy.loginfo("Shutdown program.")

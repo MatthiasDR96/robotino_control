@@ -2,7 +2,7 @@
 # Set minimum required version of cmake, project name and compile options
 ################################################################################
 cmake_minimum_required(VERSION 2.8.3)
-project(robotino_example)
+project(robotino_demo)
 
 ################################################################################
 # Find catkin packages and libraries for catkin and system dependencies
@@ -44,10 +44,10 @@ include_directories(
 # Install
 ################################################################################
 catkin_install_python(PROGRAMS 
-  nodes/robotino_IO_test.py
-  nodes/robotino_obstacle_avoidance.py
-  nodes/robotino_obstacle_stop.py
-  nodes/robotino_pointop_key.py
+  nodes/robotino_avoid.py
+  nodes/robotino_patrol.py
+  nodes/robotino_patrol_stop.py
+  nodes/robotino_patrol_avoid.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

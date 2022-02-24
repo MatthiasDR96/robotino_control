@@ -1,7 +1,7 @@
 from distutils.core import setup
 
 setup(
-    name='robotino_core',
+    name='robotino_demo',
     version='1.0.0',
     url='https://github.com/MatthiasDR96/robotino_demo.git',
     license='BSD',

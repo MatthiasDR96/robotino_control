@@ -1,3 +1,4 @@
+import tf
 import rospy
 import math
 from tf.transformations import euler_from_quaternion
@@ -6,18 +7,21 @@ class Controller():
 
 	def __init__(self):
 
+		# Init transfrom listener
+		self.tf_listener = tf.TransformListener()
+
 		# Read params
-		self.k_rho = rospy.get_param("/pure_pursuit/k_rho")
-		self.k_alpha = rospy.get_param("/pure_pursuit/k_alpha")
-		self.max_vel = rospy.get_param("/pure_pursuit/speed")
-		self.pos_tol = rospy.get_param("/pure_pursuit/pos_tol")
-		self.ang_tol = rospy.get_param("/pure_pursuit/pos_tol")
+		self.k_rho = rospy.get_param("/robotino_patrol/pure_pursuit/k_rho")
+		self.k_alpha = rospy.get_param("/robotino_patrol/pure_pursuit/k_alpha")
+		self.max_vel = rospy.get_param("/robotino_patrol/pure_pursuit/speed")
+		self.pos_tol = rospy.get_param("/robotino_patrol/pure_pursuit/pos_tol")
+		self.ang_tol = rospy.get_param("/robotino_patrol/pure_pursuit/pos_tol")
 
 	def get_current_location(self):
 
 		# Get current position wrt map frame
-		self.listener.waitForTransform('/map', '/base_link', rospy.Time(), rospy.Duration(20.0))
-		(trans, rot) = self.listener.lookupTransform('/map', '/base_link', rospy.Time(0))
+		self.tf_listener.waitForTransform('/map', '/base_link', rospy.Time(), rospy.Duration(20.0))
+		(trans, rot) = self.tf_listener.lookupTransform('/map', '/base_link', rospy.Time(0))
 
 		# Get 3D pose
 		x = trans[0]
@@ -28,18 +32,20 @@ class Controller():
 
 	def get_goal_location(self, goal):
 
+		print(goal)
+
 		# Get 3D pose
 		x = goal[0]
 		y = goal[1]
-		z = euler_from_quaternion(goal[3:])[2]
+		z = goal[2]
 
 		return [x, y, z]
 
 	def turn_towards_goal(self, cur_pos, goal_pos):
 
 		# Calculate difference
-		delta_x = goal_pos.x - cur_pos.x
-		delta_y = goal_pos.y - cur_pos.y
+		delta_x = goal_pos[0] - cur_pos[0]
+		delta_y = goal_pos[1] - cur_pos[1]
 
 		# Compute angle towards goal
 		alpha = math.atan2(delta_y, delta_x)
@@ -51,14 +57,13 @@ class Controller():
 		error = alpha - cur_pos[2]
 
 		# Compute control signels
-		v = 0.0
+		vel = 0.0
 		omega = self.k_alpha * error
 
 		# Limit commands
 		vel = min(vel, self.max_vel)
-		omega = min(omega, self.max_omega)
 
-		return v, omega, error
+		return vel, omega, error
 
 	def turn_towards_angle(self, cur_pos, goal_pos):
 
@@ -69,20 +74,19 @@ class Controller():
 		error = self.normalize_angle(error)
 
 		# Compute control signels
-		v = 0.0
+		vel = 0.0
 		omega = self.k_alpha * error
 
 		# Limit commands
 		vel = min(vel, self.max_vel)
-		omega = min(omega, self.max_omega)
 
-		return v, omega, error
+		return vel, omega, error
 
 	def move_towards_goal(self, cur_pos, goal_pos):
 
 		# Calculate difference
-		delta_x = goal_pos.x - cur_pos.x
-		delta_y = goal_pos.y - cur_pos.y
+		delta_x = goal_pos[0] - cur_pos[0]
+		delta_y = goal_pos[1] - cur_pos[1]
 
 		# Compute angle towards goal
 		alpha = math.atan2(delta_y, delta_x)
@@ -98,11 +102,9 @@ class Controller():
 		
 		# Compute control commands
 		if alpha > 0.1 or alpha < -0.1:
-			print("Turn to goal")
 			vel = 0.0
 			omega = self.k_alpha * alpha
 		else:
-			print("Move towards goal")
 			vel = self.k_rho * rho
 			omega = self.k_alpha * alpha
 		
@@ -115,11 +117,10 @@ class Controller():
 
 		# Limit commands
 		vel = min(vel, self.max_vel)
-		omega = min(omega, self.max_omega)
 
 		return vel, omega, rho
 
-	def normalize_angle(angle):
+	def normalize_angle(self, angle):
 	
 		angle1 = math.atan2(math.sin(angle), math.cos(angle))
 		return angle1

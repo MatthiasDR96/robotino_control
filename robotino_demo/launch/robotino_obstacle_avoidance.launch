@@ -1,8 +1,0 @@
-<launch>
-
-  <!-- Obstacle avoidance node -->
-  <node pkg="robotino_example" type="robotino_obstacle_avoidance.py" name="robotino_obstacle_avoidance" output="screen">
-    <rosparam file="$(find robotino_example)/param/examples_params.yaml" command="load"/>
-  </node>
-
-</launch>

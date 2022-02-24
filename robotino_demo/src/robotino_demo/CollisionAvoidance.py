@@ -7,12 +7,12 @@ class CollisionAvoidance:
 	def __init__(self):
 
 		# Set parameters for collision avoidance
-		self.shift = rospy.get_param("/collision_avoidance/shift")
-		self.range_limit = rospy.get_param("/collision_avoidance/range_limit")
-		self.safetyzone_margin = rospy.get_param("/collision_avoidance/safetyzone_margin")
-		self.robot_diameter = rospy.get_param("/collision_avoidance/robot_diameter")
-		self.robot_laser_distance = rospy.get_param("/collision_avoidance/robot_laser_distance")
-		self.threshold = rospy.get_param("/collision_avoidance/threshold")
+		self.shift = rospy.get_param("/robotino_patrol/collision_avoidance/shift")
+		self.range_limit = rospy.get_param("/robotino_patrol/collision_avoidance/range_limit")
+		self.safetyzone_margin = rospy.get_param("/robotino_patrol/collision_avoidance/safetyzone_margin")
+		self.robot_diameter = rospy.get_param("/robotino_patrol/collision_avoidance/robot_diameter")
+		self.robot_laser_distance = rospy.get_param("/robotino_patrol/collision_avoidance/robot_laser_distance")
+		self.threshold = rospy.get_param("/robotino_patrol/collision_avoidance/threshold")
 
 	def compute_cartesian_from_laser(self):
 
