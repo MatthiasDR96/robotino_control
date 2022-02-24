@@ -7,7 +7,7 @@ setup(
     license='BSD',
     author='Matthias De Ryck',
     author_email='matthias.deryck@kuleuven.be',
-    description='Control software for the Robotino AGVs at the Ultimate Factory in the KU Leuven Campus in Bruges',
+    description='Coordination software for the Robotino AGVs at the Ultimate Factory in the KU Leuven Campus in Bruges',
     packages=['robotino_core', 'robotino_core.agv', 'robotino_core.solvers'],
     package_data={'robotino_core': ['params/*.yaml', 'params/*.pgm']},
     package_dir={'': 'src'},

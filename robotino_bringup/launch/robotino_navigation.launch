@@ -1,9 +1,9 @@
 <launch>
 
-  <!-- AMCL -->
+  <!-- Localization -->
   <include file="$(find robotino_navigation)/launch/robotino_amcl.launch"/>
 
-  <!-- Move_base -->
+  <!-- Navigation -->
   <include file="$(find robotino_navigation)/launch/robotino_move_base.launch"/>
   
 </launch>
