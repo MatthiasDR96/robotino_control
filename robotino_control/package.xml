@@ -12,7 +12,7 @@
   <buildtool_depend>catkin</buildtool_depend>
   <exec_depend>robotino_bringup</exec_depend>
   <exec_depend>robotino_core</exec_depend>
-  <exec_depend>robotino_example</exec_depend>
+  <exec_depend>robotino_demo</exec_depend>
   <exec_depend>robotino_navigation</exec_depend>
   <exec_depend>robotino_simulation</exec_depend>
   <exec_depend>robotino_status</exec_depend>

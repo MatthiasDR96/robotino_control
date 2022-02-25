@@ -4,7 +4,7 @@ import rospy
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from tf.transformations import euler_from_quaternion
 
-node_locations = {'node_locations': []}
+node_locations = {}
 global counter
 counter = 1
 
@@ -29,13 +29,12 @@ def amcl_callback(msg):
 	counter += 1
 
 	# Save node
-	node_locations['node_locations'].append({node_name: tuple([x_loc, y_loc, theta])})
-	print(node_locations)
+	node_locations[node_name] = [x_loc, y_loc, theta]
 
 def shutdown():
 
 	this_dir = os.path.dirname(os.path.dirname(__file__))
-	data_path = os.path.join(this_dir, "src/robotino_demo/locations", "test.yaml")
+	data_path = os.path.join(this_dir, "locations", "test.yaml")
 	with open(data_path, 'w') as file:
 		yaml.dump(node_locations, file)
 

@@ -41,8 +41,11 @@ class Avoid():
 				vel = 0.0
 				omega = - 40 * math.pi / 180
 			elif(points_in_left_roi > self.ca.threshold and points_in_right_roi > self.ca.threshold):
-				vel = 0.0
-				omega = - 40 * math.pi / 180
+				while points_in_left_roi > self.ca.threshold or points_in_right_roi > self.ca.threshold:
+					[points_in_left_roi, points_in_right_roi] = self.ca.compute_cartesian_from_laser()
+					cmd = Twist()
+					cmd.angular.z = - 40 * math.pi / 180
+					self.cmd_pub.publish(cmd)
 			else:
 				vel = 0.3
 				omega = 0.0
@@ -54,7 +57,7 @@ class Avoid():
 			self.cmd_pub.publish(cmd)				
 
 	def shutdown(self):
-		self.cmd_vel.publish(Twist())
+		self.cmd_pub.publish(Twist())
 		rospy.sleep(1)
 
 if __name__ == '__main__':

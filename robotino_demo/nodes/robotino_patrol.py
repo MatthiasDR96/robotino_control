@@ -30,11 +30,12 @@ class Patrol():
 		this_dir = os.path.dirname(os.path.dirname(__file__))
 		data_path = os.path.join(this_dir, "locations", rospy.get_param("/robotino_patrol/locations"))
 		with open(data_path, 'r') as file:
-			locations = yaml.load(file, Loader=yaml.FullLoader)['node_locations'][0]
+			locations = yaml.load(file, Loader=yaml.FullLoader)
 
-		# Loop over positions
+		# Loop over locations
 		while not rospy.is_shutdown():
 			for point in locations:
+				print(f'Move to point {locations[point]}')
 				self.go_to_point(locations[point])
 
 	def go_to_point(self, goal):
@@ -44,7 +45,7 @@ class Patrol():
 
 		# Turn towards goal
 		error = 0.2
-		while abs(error) > 0.1:
+		while abs(error) > self.controller.ang_tol:
 
 			# Get current pos
 			cur_pos = self.controller.get_current_location()
@@ -60,12 +61,12 @@ class Patrol():
 
 		# Move towards goal
 		error = 0.2
-		while abs(error) > 0.1:
+		while abs(error) > self.controller.pos_tol:
 
 			# Get current pos
 			cur_pos = self.controller.get_current_location()
 
-			# Collision avoidance
+			# Compute control commands
 			vel, omega, error = self.controller.move_towards_goal(cur_pos, goal_pos)
 
 			# Publish command

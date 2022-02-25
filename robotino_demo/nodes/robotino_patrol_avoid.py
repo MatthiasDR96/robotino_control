@@ -31,7 +31,7 @@ class PatrolAvoid():
 		this_dir = os.path.dirname(os.path.dirname(__file__))
 		data_path = os.path.join(this_dir, "locations", rospy.get_param("/robotino_patrol/locations"))
 		with open(data_path, 'r') as file:
-			locations = yaml.load(file, Loader=yaml.FullLoader)['node_locations'][0]
+			locations = yaml.load(file, Loader=yaml.FullLoader)
 
 		# Loop over positions
 		while not rospy.is_shutdown():
@@ -45,7 +45,7 @@ class PatrolAvoid():
 
 		# Turn towards goal
 		error = 0.2
-		while abs(error) > 0.1:
+		while abs(error) > self.controller.ang_tol:
 
 			# Get current pos
 			cur_pos = self.controller.get_current_location()
@@ -61,7 +61,7 @@ class PatrolAvoid():
 
 		# Move towards goal
 		error = 0.2
-		while abs(error) > 0.1:
+		while abs(error) > self.controller.pos_tol:
 
 			# Get points in roi from laser data
 			[points_in_left_roi, points_in_right_roi] = self.ca.compute_cartesian_from_laser() 
@@ -75,10 +75,13 @@ class PatrolAvoid():
 				omega = 40 * math.pi / 180
 			elif(points_in_left_roi > self.ca.threshold and points_in_right_roi < self.ca.threshold):
 				vel = 0.0
-				omega = -40 * math.pi / 180
+				omega = - 40 * math.pi / 180
 			elif(points_in_left_roi > self.ca.threshold and points_in_right_roi > self.ca.threshold):
-				vel = 0.0
-				omega = -40 * math.pi / 180
+				while points_in_left_roi > self.ca.threshold or points_in_right_roi > self.ca.threshold:
+					[points_in_left_roi, points_in_right_roi] = self.ca.compute_cartesian_from_laser()
+					cmd = Twist()
+					cmd.angular.z = - 40 * math.pi / 180
+					self.cmd_pub.publish(cmd)
 			else:
 				vel, omega, error = self.controller.move_towards_goal(cur_pos, goal_pos)
 
@@ -89,7 +92,7 @@ class PatrolAvoid():
 			self.cmd_pub.publish(cmd)
 	
 	def shutdown(self):
-		self.cmd_vel.publish(Twist())
+		self.cmd_pub.publish(Twist())
 		rospy.sleep(1)
 
 if __name__ == '__main__':

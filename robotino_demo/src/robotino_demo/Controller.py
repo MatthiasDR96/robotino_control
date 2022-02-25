@@ -93,12 +93,8 @@ class Controller():
 		rho = math.sqrt(math.pow(delta_x,2) + math.pow(delta_y,2))
 		
 		# Compute control commands
-		if abs(alpha) > 0.1:
-			vel = 0.0
-			omega = self.k_alpha * alpha
-		else:
-			vel = self.k_rho * rho
-			omega = self.k_alpha * alpha
+		vel = self.k_rho * rho
+		omega = self.k_alpha * alpha
 		
 		# Keep velocity constant
 		tol = 1e-6
