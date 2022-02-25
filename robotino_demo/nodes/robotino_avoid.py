@@ -18,9 +18,6 @@ class Avoid():
 		# Init publisher
 		self.cmd_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
 
-		# Init transfrom listener
-		self.tf_listener = tf.TransformListener()
-
 		# Create traject controller
 		self.controller = Controller()
 
@@ -59,7 +56,6 @@ class Avoid():
 	def shutdown(self):
 		self.cmd_vel.publish(Twist())
 		rospy.sleep(1)
-
 
 if __name__ == '__main__':
 

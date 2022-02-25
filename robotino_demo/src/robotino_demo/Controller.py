@@ -58,9 +58,6 @@ class Controller():
 		vel = 0.0
 		omega = self.k_alpha * error
 
-		# Limit commands
-		vel = min(vel, self.max_vel)
-
 		return vel, omega, error
 
 	def turn_towards_angle(self, cur_pos, goal_pos):
@@ -74,9 +71,6 @@ class Controller():
 		# Compute control signels
 		vel = 0.0
 		omega = self.k_alpha * error
-
-		# Limit commands
-		vel = min(vel, self.max_vel)
 
 		return vel, omega, error
 
@@ -99,7 +93,7 @@ class Controller():
 		rho = math.sqrt(math.pow(delta_x,2) + math.pow(delta_y,2))
 		
 		# Compute control commands
-		if alpha > 0.1 or alpha < -0.1:
+		if abs(alpha) > 0.1:
 			vel = 0.0
 			omega = self.k_alpha * alpha
 		else:
@@ -119,6 +113,5 @@ class Controller():
 		return vel, omega, rho
 
 	def normalize_angle(self, angle):
-	
 		angle1 = math.atan2(math.sin(angle), math.cos(angle))
 		return angle1

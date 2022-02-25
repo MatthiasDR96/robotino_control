@@ -6,7 +6,7 @@ class CollisionAvoidance:
 
 	def __init__(self):
 
-		# Set parameters for collision avoidance
+		# Set params
 		self.shift = rospy.get_param("/robotino_patrol/collision_avoidance/shift")
 		self.range_limit = rospy.get_param("/robotino_patrol/collision_avoidance/range_limit")
 		self.safetyzone_margin = rospy.get_param("/robotino_patrol/collision_avoidance/safetyzone_margin")
@@ -22,8 +22,8 @@ class CollisionAvoidance:
 		roi_boundry_right = scan.angle_min + self.shift
 		
 		# Convert from polar to cartesian
-		amount_of_measurements = np.shape(scan.ranges)[0]
-		theta = np.linspace(roi_boundry_right, roi_boundry_left, amount_of_measurements)
+		number_of_measurements = np.shape(scan.ranges)[0]
+		theta = np.linspace(roi_boundry_right, roi_boundry_left, number_of_measurements)
 		ranges_roi = np.array(scan.ranges[0:np.shape(scan.ranges)[0]])
 		ranges_roi[ranges_roi < (self.robot_diameter / 2)] = 10
 		ranges_matrix = np.array([theta , ranges_roi])
@@ -43,7 +43,7 @@ class CollisionAvoidance:
 		avoid_ranges_left = np.transpose(np.array([ranges_left_roi[:,i] for i in range(ranges_left_roi.shape[1]) if (ranges_left_roi[1][i] < self.range_limit)]))
 		avoid_ranges_right = np.transpose(np.array([ranges_right_roi[:,i] for i in range(ranges_right_roi.shape[1]) if (ranges_right_roi[1][i] < self.range_limit)]))
 
-		# Amount of points in left and right roi
+		# Number of points in left and right roi
 		points_in_left_roi = len(np.transpose(avoid_ranges_left))
 		points_in_right_roi = len(np.transpose(avoid_ranges_right))
 		

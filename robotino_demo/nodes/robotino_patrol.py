@@ -39,15 +39,15 @@ class Patrol():
 
 	def go_to_point(self, goal):
 
+		# Get goal pos
+		goal_pos = self.controller.get_goal_location(goal)
+
 		# Turn towards goal
 		error = 0.2
 		while abs(error) > 0.1:
 
 			# Get current pos
 			cur_pos = self.controller.get_current_location()
-
-			# Get goal pos
-			goal_pos = self.controller.get_goal_location(goal)
 
 			# Compute control commands
 			vel, omega, error = self.controller.turn_towards_goal(cur_pos, goal_pos)
@@ -64,9 +64,6 @@ class Patrol():
 
 			# Get current pos
 			cur_pos = self.controller.get_current_location()
-
-			# Get goal pos
-			goal_pos = self.controller.get_goal_location(goal)
 
 			# Collision avoidance
 			vel, omega, error = self.controller.move_towards_goal(cur_pos, goal_pos)

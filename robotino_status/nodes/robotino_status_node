@@ -8,6 +8,9 @@ class RobotinoStatus:
 
     def __init__(self):
 
+        # Define node
+        rospy.init_node('robotino_status_node')
+
         # Define publishers
         self.digital_pub = rospy.Publisher("/set_digital_values", DigitalReadings, queue_size=10)
 
@@ -52,7 +55,6 @@ class RobotinoStatus:
 
 if __name__ == '__main__':
     try:
-        rospy.init_node('robotino_status_node')
         RobotinoStatus()
         rospy.spin()
     except:
