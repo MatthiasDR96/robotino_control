@@ -8,7 +8,7 @@
 
   <!-- LiDAR Driver -->
   <node name="sick_node" pkg="sicks300" type="sick300_driver" >
-    <param name="devicename" type="string" value="/dev/ttyUSB0" />
+    <param name="devicename" type="string" value="/dev/ttyS5" />
 	  <remap from="laserscan" to="scan" />
   </node>
 

@@ -4,13 +4,16 @@
   <node pkg="move_base" type="move_base" name="move_base" output="screen">
 
     <!--  Read all parameter files for navigation  -->
+    <param name="base_global_planner" value="navfn/NavfnROS" />
     <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS" />
     <rosparam file="$(find robotino_navigation)/param/costmap_params/costmap_common_params.yaml" command="load" ns="global_costmap" />
     <rosparam file="$(find robotino_navigation)/param/costmap_params/costmap_common_params.yaml" command="load" ns="local_costmap" />
     <rosparam file="$(find robotino_navigation)/param/costmap_params/local_costmap_params.yaml" command="load" />
     <rosparam file="$(find robotino_navigation)/param/costmap_params/global_costmap_params.yaml" command="load" />
+    <rosparam file="$(find robotino_navigation)/param/planner_params/base_local_planner_params.yaml" command="load" />
     <rosparam file="$(find robotino_navigation)/param/planner_params/dwa_local_planner_params.yaml" command="load" />
     <rosparam file="$(find robotino_navigation)/param/planner_params/global_planner_params.yaml" command="load"/>
+    <rosparam file="$(find robotino_navigation)/param/planner_params/navfn_global_planner_params.yaml" command="load"/>
     <rosparam file="$(find robotino_navigation)/param/move_base_params.yaml" command="load" />
   </node>
   

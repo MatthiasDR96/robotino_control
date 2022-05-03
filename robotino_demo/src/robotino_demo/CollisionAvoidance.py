@@ -35,26 +35,38 @@ class CollisionAvoidance:
 		theta = np.linspace(roi_boundry_right, roi_boundry_left, number_of_measurements)
 		ranges_roi = np.array(scan.ranges[0:np.shape(scan.ranges)[0]])
 
-		# Remove point that lie inside the robot diameter
-		indices_to_remove = [i for i in range(len(ranges_roi)) if ranges_roi[i] < (self.robot_diameter / 2)]
-		theta = np.delete(theta, indices_to_remove)
-		ranges_roi = np.delete(ranges_roi, indices_to_remove)
-
 		# Convert from polar to cartesian
-		ranges_matrix = np.array([theta , ranges_roi])
-		x = np.multiply(ranges_matrix[1][:], np.cos(ranges_matrix[0][:]))
-		y = np.multiply(ranges_matrix[1][:], np.sin(ranges_matrix[0][:])) + self.robot_laser_distance
-		ranges_cartesian = np.array([x , y])
+		x = np.multiply(ranges_roi, np.cos(theta))
+		y = np.multiply(ranges_roi, np.sin(theta)) + self.robot_laser_distance
+
+		# Remove points that lie inside the robot diameter
+		indices_to_remove = [i for i in range(len(ranges_roi)) if x[i]**2 + y[i]**2 < (self.robot_diameter / 2)**2]
+		x = np.delete(x, indices_to_remove)
+		y = np.delete(y, indices_to_remove)
+		ranges_cartesian = np.transpose([x, y])
 		
 		# Set limits of roi
 		cartesian_left_limit = -(self.robot_diameter / 2) - self.safetyzone_margin
 		cartesian_right_limit = (self.robot_diameter / 2) + self.safetyzone_margin
 
+		# Points within safety zone
+		ranges_cartesian_roi = ranges_cartesian[np.where(ranges_cartesian[:,1] <= self.range_limit)]
+
+		# Points in left and right roi
+		ranges_cartesian_roi_left = ranges_cartesian_roi[np.where(ranges_cartesian_roi[:,0] >= cartesian_left_limit)]
+		ranges_cartesian_roi_left = ranges_cartesian_roi_left[np.where(ranges_cartesian_roi_left[:,0] <= 0)] 
+		ranges_cartesian_roi_right = ranges_cartesian_roi[np.where(ranges_cartesian_roi[:,0] <= cartesian_right_limit)]
+		ranges_cartesian_roi_right = ranges_cartesian_roi_right[np.where(ranges_cartesian_roi_right[:,0] >= 0)]
+
+		# Number of points in left and right roi
+		points_in_left_roi = len(ranges_cartesian_roi_left)
+		points_in_right_roi = len(ranges_cartesian_roi_right)
+
 		# Plot avoidance
 		plt.ion()
 		self.ax.add_patch(plt.Circle((0, 0), self.robot_diameter/2, color='k'))
 		self.ax.add_patch(plt.Rectangle((cartesian_left_limit, 0), (self.robot_diameter + 2*self.safetyzone_margin), self.range_limit, edgecolor = 'red', facecolor = 'blue', fill=None,lw=2))
-		self.ax.plot(ranges_cartesian[0][:], ranges_cartesian[1][:], 'r.')
+		self.ax.plot(x, y, 'r.')
 		self.ax.set_xlim([-1,1])
 		self.ax.set_ylim([0, 2])
 		self.ax.axes.xaxis.set_visible(False)
@@ -62,18 +74,6 @@ class CollisionAvoidance:
 		plt.draw()
 		plt.pause(0.001)
 		plt.cla()
-
-		# Points in roi
-		ranges_left_roi = np.transpose(np.array([ranges_cartesian[:,i] for i in range(ranges_cartesian.shape[1]) if (ranges_cartesian[0,i] >= cartesian_left_limit) and (ranges_cartesian[0][i] <= 0)]))
-		ranges_right_roi = np.transpose(np.array([ranges_cartesian[:,i] for i in range(ranges_cartesian.shape[1]) if (ranges_cartesian[0,i] <= cartesian_right_limit) and (ranges_cartesian[0][i] >= 0)]))
-
-		# Points in roi and safety zone
-		avoid_ranges_left = np.transpose(np.array([ranges_left_roi[:,i] for i in range(ranges_left_roi.shape[1]) if (ranges_left_roi[1][i] < self.range_limit)]))
-		avoid_ranges_right = np.transpose(np.array([ranges_right_roi[:,i] for i in range(ranges_right_roi.shape[1]) if (ranges_right_roi[1][i] < self.range_limit)]))
-
-		# Number of points in left and right roi
-		points_in_left_roi = len(np.transpose(avoid_ranges_left))
-		points_in_right_roi = len(np.transpose(avoid_ranges_right))
 		
 		return [points_in_left_roi, points_in_right_roi]
 
