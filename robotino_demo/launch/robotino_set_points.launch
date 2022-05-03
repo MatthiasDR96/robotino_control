@@ -1,6 +1,6 @@
 <launch>
 
-  <!-- Patrol node -->
+  <!-- Set points -->
   <node pkg="robotino_demo" type="robotino_set_points.py" name="robotino_set_points" output="screen"/>
 
 </launch>

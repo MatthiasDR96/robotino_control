@@ -1,7 +1,7 @@
 <launch>
 
   <!-- Patrol stop node -->
-  <node pkg="robotino_demo" type="robotino_patrol_stop.py" name="robotino_patrol_stop" output="screen">
+  <node pkg="robotino_demo" type="robotino_patrol_stop.py" name="robotino_patrol" output="screen">
     <rosparam file="$(find robotino_demo)/param/examples_params.yaml" command="load" />
   </node>
 

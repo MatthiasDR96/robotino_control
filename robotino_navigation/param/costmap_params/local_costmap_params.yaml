@@ -1,12 +1,15 @@
 local_costmap:
    global_frame: odom
-   robot_base_frame: /base_link
-   update_frequency: 5.0  # how quickly sensor data makes it into the costmap 
-   publish_frequency: 2.0
-   transform_tolerance: 0.5
+   robot_base_frame: base_link
+   static_map: false
+   update_frequency: 5.0
+   publish_frequency: 5.0
+   transform_tolerance: 0.25
    rolling_window: true
    width: 6.0
    height: 6.0
+   origin_x: 3.0
+   origin_y: 3.0
    resolution: 0.05
    plugins:
     #- {name: obstacle_layer,      type: "costmap_2d::ObstacleLayer"}

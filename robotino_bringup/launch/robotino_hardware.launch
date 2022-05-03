@@ -1,24 +1,20 @@
 <launch>
 
-  <!-- Arguments -->
-  <arg name="hostname" default="0.0.0.0" />
-
   <!-- Robotino description -->
   <include file="$(find robotino_bringup)/launch/includes/description.launch.xml"/>
 
   <!-- Robotino bringup -->
-  <include file="$(find robotino_node)/launch/robotino_simple_node.launch" >
-    <arg name="hostname" value="$(arg hostname)" />
-  </include>
+  <include file="$(find robotino_node)/launch/robotino_simple_node.launch" />
 
   <!-- LiDAR Driver -->
   <node name="sick_node" pkg="sicks300" type="sick300_driver" >
+    <param name="devicename" type="string" value="/dev/ttyUSB0" />
 	  <remap from="laserscan" to="scan" />
   </node>
 
   <!-- Camera driver -->
   <node name="usb_cam" pkg="usb_cam" type="usb_cam_node" > 
-  	<rosparam file="$(find robotino_navigation)/param/camera_params.yaml" command="load" />
+  	<rosparam file="$(find robotino_bringup)/param/camera_params.yaml" command="load" />
   </node>
 
   <!-- Joystick driver -->

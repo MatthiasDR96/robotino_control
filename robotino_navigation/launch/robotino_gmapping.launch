@@ -1,0 +1,14 @@
+<launch>
+
+  <!-- Robotino hardware -->
+  <include file="$(find robotino_bringup)/launch/robotino_hardware.launch"/>
+  
+  <!-- Gmapping node -->
+  <node pkg="gmapping" type="slam_gmapping" name="gmapping" output="screen">
+    <rosparam command="load" file="$(find robotino_navigation)/param/gmapping_params.yaml" />
+  </node>
+
+  <!-- Rviz -->
+  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find robotino_navigation)/rviz/robotino_gmapping.rviz"/>
+
+</launch>

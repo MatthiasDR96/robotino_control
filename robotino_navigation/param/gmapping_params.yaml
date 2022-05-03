@@ -1,3 +1,6 @@
+base_frame: base_link
+odom_frame: odom
+map_frame: map
 map_update_interval: 2.0
 maxUrange: 6.0
 sigma: 0.05

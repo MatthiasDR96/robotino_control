@@ -47,6 +47,9 @@ class PatrolStop():
 		error = 0.2
 		while abs(error) > self.controller.ang_tol:
 
+			# Get points in roi from laser data
+			[points_in_left_roi, points_in_right_roi] = self.ca.compute_cartesian_from_laser() 
+
 			# Get current pos
 			cur_pos = self.controller.get_current_location()
 
@@ -54,6 +57,7 @@ class PatrolStop():
 			vel, omega, error = self.controller.turn_towards_goal(cur_pos, goal_pos)
 
 			# Publish command
+			print("Turn towards goal")
 			cmd = Twist()
 			cmd.linear.x = vel
 			cmd.angular.z = omega
@@ -70,6 +74,7 @@ class PatrolStop():
 			cur_pos = self.controller.get_current_location()
 
 			# Compute control commands
+			print(f"{points_in_right_roi + points_in_left_roi} - {self.ca.threshold}")
 			if (points_in_right_roi + points_in_left_roi) > self.ca.threshold:
 				vel = 0.0
 				omega = 0.0
@@ -77,6 +82,7 @@ class PatrolStop():
 				vel, omega, error = self.controller.move_towards_goal(cur_pos, goal_pos)
 
 			# Publish command
+			print("Move towards goal")
 			cmd = Twist()
 			cmd.linear.x = vel
 			cmd.angular.z = omega
@@ -88,8 +94,5 @@ class PatrolStop():
 
 if __name__ == '__main__':
 
-	try:
-		PatrolStop()
-		rospy.spin()
-	except:
-		rospy.loginfo("Shutdown program.")
+	PatrolStop()
+	rospy.spin()

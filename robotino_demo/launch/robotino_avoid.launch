@@ -1,7 +1,7 @@
 <launch>
 
   <!-- Patrol avoid node -->
-  <node pkg="robotino_demo" type="robotino_avoid.py" name="robotino_avoid" output="screen">
+  <node pkg="robotino_demo" type="robotino_avoid.py" name="robotino_patrol" output="screen">
     <rosparam file="$(find robotino_demo)/param/examples_params.yaml" command="load" />
   </node>
 
