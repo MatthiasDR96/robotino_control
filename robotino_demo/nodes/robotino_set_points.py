@@ -20,7 +20,7 @@ def amcl_callback(msg):
 	# Get orientation
 	orientation_q = msg.pose.pose.orientation
 	orientation_list = [orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w]
-	(_, _, yaw) = euler_from_quaternion (orientation_list)
+	(_, _, yaw) = euler_from_quaternion(orientation_list)
 	theta = yaw
 	print("Received pose: x=" + str(x_loc) + ' y=' + str(y_loc) + ' theta=' + str(theta))
 

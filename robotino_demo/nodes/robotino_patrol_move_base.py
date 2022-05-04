@@ -5,6 +5,7 @@ import yaml
 from geometry_msgs.msg import Twist
 import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from tf.transformations import quaternion_from_euler
 
 class Patrol():
 
@@ -44,7 +45,11 @@ class Patrol():
 		goal_.target_pose.header.stamp = rospy.Time.now()
 		goal_.target_pose.pose.position.x = goal[0]
 		goal_.target_pose.pose.position.y = goal[1]
-		goal_.target_pose.pose.orientation.w = 1.0
+		q = quaternion_from_euler(0.0, 0.0, goal[2])
+		goal_.target_pose.pose.orientation.x = q[0]
+		goal_.target_pose.pose.orientation.y = q[1]
+		goal_.target_pose.pose.orientation.z = q[2]
+		goal_.target_pose.pose.orientation.w = q[3]
 
 		# Send goal
 		client.send_goal(goal_)

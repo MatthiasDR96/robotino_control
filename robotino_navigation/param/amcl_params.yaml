@@ -9,7 +9,7 @@ max_particles: 5000
 update_min_d: 0.2
 update_min_a: 0.5
 resample_interval: 1
-transform_tolerance: 0.1
+transform_tolerance: 1.0
 recovery_alpha_slow: 0.0
 recovery_alpha_fast: 0.0
 

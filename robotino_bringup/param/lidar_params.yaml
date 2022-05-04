@@ -1,0 +1,3 @@
+devicename: /dev/ttyUSB0
+frame: laser_link
+field_of_view: 180

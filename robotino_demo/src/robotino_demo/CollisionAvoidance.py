@@ -63,17 +63,17 @@ class CollisionAvoidance:
 		points_in_right_roi = len(ranges_cartesian_roi_right)
 
 		# Plot avoidance
-		plt.ion()
-		self.ax.add_patch(plt.Circle((0, 0), self.robot_diameter/2, color='k'))
-		self.ax.add_patch(plt.Rectangle((cartesian_left_limit, 0), (self.robot_diameter + 2*self.safetyzone_margin), self.range_limit, edgecolor = 'red', facecolor = 'blue', fill=None,lw=2))
-		self.ax.plot(x, y, 'r.')
-		self.ax.set_xlim([-1,1])
-		self.ax.set_ylim([0, 2])
-		self.ax.axes.xaxis.set_visible(False)
-		self.ax.axes.yaxis.set_visible(False)
-		plt.draw()
-		plt.pause(0.001)
-		plt.cla()
+		#plt.ion()
+		#self.ax.add_patch(plt.Circle((0, 0), self.robot_diameter/2, color='k'))
+		#self.ax.add_patch(plt.Rectangle((cartesian_left_limit, 0), (self.robot_diameter + 2*self.safetyzone_margin), self.range_limit, edgecolor = 'red', facecolor = 'blue', fill=None,lw=2))
+		#self.ax.plot(x, y, 'r.')
+		#self.ax.set_xlim([-1,1])
+		#self.ax.set_ylim([0, 2])
+		#self.ax.axes.xaxis.set_visible(False)
+		#self.ax.axes.yaxis.set_visible(False)
+		#plt.draw()
+		#plt.pause(0.001)
+		#plt.cla()
 		
 		return [points_in_left_roi, points_in_right_roi]
 

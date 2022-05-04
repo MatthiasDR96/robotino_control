@@ -8,7 +8,7 @@
 
   <!-- LiDAR Driver -->
   <node name="sick_node" pkg="sicks300" type="sick300_driver" >
-    <param name="devicename" type="string" value="/dev/ttyS5" />
+    <rosparam file="$(find robotino_bringup)/param/lidar_params.yaml" command="load" />
 	  <remap from="laserscan" to="scan" />
   </node>
 
