@@ -1,8 +1,8 @@
 base_frame: base_link
 odom_frame: odom
 map_frame: map
-map_update_interval: 0.1
-maxUrange: 6.0
+map_update_interval: 5.0
+maxUrange: 5.0
 sigma: 0.05
 kernelSize: 1
 lstep: 0.05
@@ -20,7 +20,7 @@ linearUpdate: 1.0
 angularUpdate: 0.5
 temporalUpdate: 0.5
 resampleThreshold: 0.5
-particles: 1
+particles: 30
 xmin: -10.0
 ymin: -10.0
 xmax: 10.0
@@ -30,3 +30,4 @@ llsamplerange: 0.01
 llsamplestep: 0.01
 lasamplerange: 0.005
 lasamplestep: 0.005
+maxRange: 6.0

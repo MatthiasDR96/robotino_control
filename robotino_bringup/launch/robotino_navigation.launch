@@ -1,12 +1,7 @@
 <launch>
 
-  <!-- Localization 
-  <include file="$(find robotino_navigation)/launch/robotino_amcl.launch"/> -->
-
-  <!-- Gmapping node -->
-  <node pkg="gmapping" type="slam_gmapping" name="gmapping">
-    <rosparam command="load" file="$(find robotino_navigation)/param/gmapping_params.yaml" />
-  </node>
+  <!-- Localization -->
+  <include file="$(find robotino_navigation)/launch/robotino_amcl.launch"/>
 
   <!-- Navigation -->
   <include file="$(find robotino_navigation)/launch/robotino_move_base.launch"/>

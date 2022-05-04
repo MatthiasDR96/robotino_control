@@ -2,10 +2,10 @@ DWAPlannerROS:
 
 # Robot Configuration Parameters - Kobuki
   max_vel_x: 0.3  ## 0.55
-  min_vel_x: -0.3 ##
+  min_vel_x: 0.0 ##
 
   max_vel_y: 0.4  # omni drive robot
-  min_vel_y: -0.4  # omni drive robot
+  min_vel_y: 0.0  # omni drive robot
 
   max_vel_trans: 0.3 ## choose slightly less than the base's capability
   min_vel_trans: -0.3  ## this is the min trans velocity when there is negligible rotational velocity
