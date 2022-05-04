@@ -54,6 +54,8 @@ class Controller():
 		# Compute error
 		error = alpha - cur_pos[2]
 
+		print(f'{alpha*180/math.pi} - {cur_pos[2]*180/math.pi} = {error*180/math.pi}')
+
 		# Compute control signels
 		vel = 0.0
 		omega = self.k_alpha * error
