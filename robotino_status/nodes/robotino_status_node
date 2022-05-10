@@ -2,7 +2,19 @@
 
 import rospy
 from robotino_msgs.msg import DigitalReadings
+from robotino_msgs.msg import DistanceReadings
+from robotino_msgs.msg import PowerReadings
+from actionlib_msgs.msg import GoalID
+from geometry_msgs.msg import Twist
+from enum import Enum
 
+# Temporary until general AMR FSM has been defined 
+class internalStates(Enum):
+    CHARGING = 0
+    LEAVING_CHARGER = 1
+    MOVING = 2
+    ENTERING_DOCKING = 3
+    LEAVING_DOCKING = 4
 
 class RobotinoStatus:
 
@@ -13,45 +25,69 @@ class RobotinoStatus:
 
         # Define publishers
         self.digital_pub = rospy.Publisher("/set_digital_values", DigitalReadings, queue_size=10)
+        self.cancel_pub = rospy.Publisher("/move_base/cancel", GoalID, queue_size = 1)
+        self.cmdVel_pub = rospy.Publisher("/cmd_vel", Twist, queue_size = 10)
 
         # Define subscribers
         self.digital_sub = rospy.Subscriber("/digital_readings", DigitalReadings, self.digital_readings_callback)
+        self.power_sub = rospy.Subscriber("/power_readings", PowerReadings, self.power_readings_callback)
+        self.distance_sub = rospy.Subscriber("/distance_sensors/distance_readings", DistanceReadings, self.distance_readings_callback)
 
         # Status
         self.light_status = [False, False, True]  # Red, orange, green
-        self.emergency_button_status = False
-        self.conveyor_sensor_status = False
-        self.reset_button_status = False
-        self.battery_status = 100
-        self.x_loc = 0.0
-        self.y_loc = 0.0
-        self.theta = 0.0
-        self.node = None
+        self.curr_state = internalStates.CHARGING
+
+        # Which distance sensors are relevant to stop the AMR depend on the internal state
+        self.relevantSensors = {
+            internalStates.CHARGING : [0,1,2,7,8],         # ignoring backward facing sensors (3,4,5,6)
+            internalStates.LEAVING_CHARGER : [0,1,2,7,8],   # ignoring backward facing sensors (3,4,5,6)
+            internalStates.MOVING : [0,1,2,3,4,5,6,7,8],    # need all sensors
+            internalStates.ENTERING_DOCKING : [],           # no relevant sensor, since forward movement only but need to go very close to station
+            internalStates.LEAVING_DOCKING : [2,3,4,5,6,7]  # ignoring forward facing sensors, since backwards movement only (0,1,8)
+            }
 
     def digital_readings_callback(self, msg):
 
         # Read inputs
-        self.light_status = [msg.values[2], msg.values[3], msg.values[4]]
-        self.emergency_button_status = msg.values[0]
-        self.conveyor_sensor_status = msg.values[2]
-        self.reset_button_status = msg.values[4]
+        emergency_button_status = msg.values[0]
+        conveyor_sensor_status = msg.values[2]
+        reset_button_status = msg.values[4]
 
         # Check emergency button
-        if self.emergency_button_status:
-            self.light_status[0] = False
+        if emergency_button_status:
             self.light_status[1] = False
             self.light_status[2] = True
         else:
-            self.light_status[0] = False
             self.light_status[1] = True
             self.light_status[2] = False
 
-        # Publish
+        # Publish light status
         msg.values[2] = self.light_status[0]
         msg.values[3] = self.light_status[1]
         msg.values[4] = self.light_status[2]
         self.digital_pub.publish(msg)
 
+    def power_readings_callback(self, msg):
+
+        # Check battery
+        if msg.batteryLow:
+            self.light_status[0] = True
+        else:
+            self.light_status[0] = False
+
+    def distance_readings_callback(self, msg):
+        if self.curr_state == internalStates.LEAVING_CHARGER:           # Also use this function to determine if we have fully left charger
+            if (msg.distances[4] > 0.35 and msg.distances[5] > 0.35):       # fully left charger if distance sensers 4 and 5 indicate more then 35 cm
+                self.curr_state = internalStates.MOVING         # update state
+                rospy.logdebug("Safety node detecting AMR fully left charger: internalStates.LEAVING_CHARGER -> internalStates.MOVING")
+                
+        for i in self.relevantSensors[self.curr_state]: # Make sure only the relevant sensors are analysed
+            if(msg.distances[i] < 0.2):         # Determine if threshold is violated
+                #cancel_goal = GoalID()          # Threshold violated, hence, publishing empty GoalID message to halt AMR
+                #self.cancel_pub.publish(cancel_goal)
+                emptyTwist = Twist()
+                self.cmdVel_pub.publish(emptyTwist)
+                rospy.loginfo("Will cancel goal! Heading {0:.3f} has distance {1:.3f} which is lower than threshold 0.2!".format(msg.headings[i], msg.distances[i]))
 
 if __name__ == '__main__':
     try:
