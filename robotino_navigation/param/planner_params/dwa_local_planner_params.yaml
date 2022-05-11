@@ -25,7 +25,7 @@ DWAPlannerROS:
 
 # Goal Tolerance Parameters
   yaw_goal_tolerance: 0.1  # 0.05
-  xy_goal_tolerance: 0.10  # 0.10
+  xy_goal_tolerance: 0.20  # 0.10
   latch_xy_goal_tolerance: true  # simply rotate after reaching xy, even if it ends up outside the tolerance after doing so
 
 # Forward Simulation Parameters
