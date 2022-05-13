@@ -1,8 +1,8 @@
 import rospy
 import numpy as np
-import matplotlib as mpl
+#import matplotlib as mpl
 from sensor_msgs.msg import LaserScan
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 class CollisionAvoidance:
 
@@ -17,11 +17,11 @@ class CollisionAvoidance:
 		self.threshold = rospy.get_param("/robotino_patrol/collision_avoidance/threshold")
 
 		# Canvas
-		mpl.rcParams['toolbar'] = 'None'	
-		self.fig, self.ax = plt.subplots()
-		self.fig.canvas.toolbar_visible = False
-		self.fig.canvas.header_visible = False
-		self.fig.canvas.footer_visible = False
+		#mpl.rcParams['toolbar'] = 'None'	
+		#self.fig, self.ax = plt.subplots()
+		#self.fig.canvas.toolbar_visible = False
+		#self.fig.canvas.header_visible = False
+		#self.fig.canvas.footer_visible = False
 
 	def compute_cartesian_from_laser(self):
 

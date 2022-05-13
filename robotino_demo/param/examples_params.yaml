@@ -17,8 +17,8 @@ pure_pursuit:
 
 collision_avoidance:
   shift: 1.5707963
-  range_limit: 0.7
-  safetyzone_margin: 0.2
+  range_limit: 1.2 #0.7
+  safetyzone_margin: 0.3 #0.2
   robot_diameter: 0.45
   robot_laser_distance: 0.2
   threshold: 10
