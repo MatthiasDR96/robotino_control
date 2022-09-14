@@ -1,9 +1,9 @@
 @startuml connection_diagram
 
-package "Decentral Control Framework" {
+package "Coordination Framework" {
 
     [Communication_layer]
-    [Vehicle_Agent]
+    [MA_Agent]
     [TA_Agent]
     [RO_Agent]
     [RM_Agent]
@@ -17,9 +17,8 @@ database "Database" {
 
 }
 
-[Vehicle] -> [Communication_layer] : ROS
-[Vehicle] <- [Communication_layer] : HMI
-[Vehicle] --> Action : Operator
+[Robot] <-> [Communication_layer] : ROS
+[Robot] --> Action
 
 [global_task_list] -> [Webserver] : SQL
 [Webserver] -> HTTP
@@ -27,7 +26,7 @@ database "Database" {
 [TA_Agent] <--> [Communication_layer] : SQL
 [RO_Agent] <--> [Communication_layer] : SQL
 [RM_Agent] <--> [Communication_layer] : SQL
-[Vehicle_Agent] <--> [Communication_layer] : SQL
+[MA_Agent] <--> [Communication_layer] : SQL
 
 [Communication_layer] <--> [global_task_list] : SQL
 [Communication_layer] <--> [global_robot_list] : SQL
